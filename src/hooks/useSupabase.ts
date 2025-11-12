@@ -59,12 +59,15 @@ export function useSupabase() {
     [supabase]
   )
 
-  // Send a message
+  // Send a message - FIXED: Explicitly send UTC timestamp
   const sendMessage = useCallback(
     async (channelId: string, content: string, userId: string) => {
       try {
         // Get user's timezone from browser
         const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+        // Get current UTC time explicitly
+        const now = new Date()
 
         const { data, error } = await supabase.from('messages').insert([
           {
@@ -72,6 +75,7 @@ export function useSupabase() {
             user_id: userId,
             content,
             sender_timezone: userTimezone,
+            created_at: now.toISOString(), // Explicitly send ISO string (UTC)
           },
         ])
 
@@ -80,7 +84,12 @@ export function useSupabase() {
           throw error
         }
 
-        console.log('Message inserted with timezone:', userTimezone)
+        console.log(
+          'Message inserted with timezone:',
+          userTimezone,
+          'at',
+          now.toISOString()
+        )
         return data
       } catch (error) {
         console.error('sendMessage error:', error)

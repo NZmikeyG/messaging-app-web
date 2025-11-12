@@ -88,20 +88,34 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
     }
   }
 
-  // Format timestamp - SIMPLE AND WORKING
+  // Format timestamp: Show sender's timezone + viewer's local time
   const formatTimestamp = (message: Message) => {
-    const date = new Date(message.created_at)
+    // Parse UTC timestamp from database
+    const utcDate = new Date(message.created_at)
 
-    const timeStr = date.toLocaleString('en-US', {
+    // Get viewer's current timezone
+    const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+    // Show the time in SENDER's timezone
+    const senderTimeStr = utcDate.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
       hour12: true,
+      timeZone: message.sender_timezone || 'UTC',
     })
 
-    return `${timeStr} (${message.sender_timezone || 'UTC'})`
+    // Show the time in VIEWER's timezone (in parentheses for context)
+    const viewerTimeStr = utcDate.toLocaleString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: viewerTz,
+    })
+
+    return `${senderTimeStr} (${message.sender_timezone || 'UTC'}) - Your time: ${viewerTimeStr}`
   }
 
   if (!channel) {
