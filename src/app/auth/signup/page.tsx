@@ -63,12 +63,12 @@ export default function SignupPage() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
       <div className="w-full max-w-md">
         <div className="rounded-lg bg-white shadow-xl">
-          <form onSubmit={handleSignup} className="space-y-6 px-6 py-8" suppressHydrationWarning>
+          <div className="border-b border-gray-200 px-6 py-8">
             <h1 className="text-3xl font-bold text-gray-900">Create Account</h1>
             <p className="mt-2 text-gray-600">Join us today</p>
           </div>
 
-          <form onSubmit={handleSignup} className="space-y-6 px-6 py-8">
+          <form onSubmit={handleSignup} className="space-y-6 px-6 py-8" suppressHydrationWarning>
             <div>
               <label
                 htmlFor="email"
@@ -85,6 +85,7 @@ export default function SignupPage() {
                 placeholder="you@example.com"
                 required
                 disabled={loading}
+                suppressHydrationWarning
               />
             </div>
 
@@ -104,6 +105,7 @@ export default function SignupPage() {
                 placeholder="At least 8 characters"
                 required
                 disabled={loading}
+                suppressHydrationWarning
               />
             </div>
 
@@ -123,6 +125,7 @@ export default function SignupPage() {
                 placeholder="Confirm your password"
                 required
                 disabled={loading}
+                suppressHydrationWarning
               />
             </div>
 

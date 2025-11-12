@@ -65,6 +65,7 @@ export default function LoginPage() {
                 placeholder="you@example.com"
                 required
                 disabled={loading}
+                suppressHydrationWarning
               />
             </div>
 
@@ -84,6 +85,7 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 required
                 disabled={loading}
+                suppressHydrationWarning
               />
             </div>
 
