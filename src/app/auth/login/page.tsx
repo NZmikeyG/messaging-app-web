@@ -48,7 +48,7 @@ export default function LoginPage() {
             <p className="mt-2 text-gray-600">Sign in to your account</p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-6 px-6 py-8">
+          <form onSubmit={handleLogin} className="space-y-6 px-6 py-8" suppressHydrationWarning>
             <div>
               <label
                 htmlFor="email"

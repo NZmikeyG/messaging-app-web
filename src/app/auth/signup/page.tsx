@@ -63,7 +63,7 @@ export default function SignupPage() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
       <div className="w-full max-w-md">
         <div className="rounded-lg bg-white shadow-xl">
-          <div className="border-b border-gray-200 px-6 py-8">
+          <form onSubmit={handleSignup} className="space-y-6 px-6 py-8" suppressHydrationWarning>
             <h1 className="text-3xl font-bold text-gray-900">Create Account</h1>
             <p className="mt-2 text-gray-600">Join us today</p>
           </div>
