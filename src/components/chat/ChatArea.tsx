@@ -11,12 +11,32 @@ interface ChatAreaProps {
   userEmail: string
 }
 
+const EMOJI_REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '👏', '😢', '🤔']
+const EDIT_WINDOW_MINUTES = 15
+
 export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(false)
   const [newMessage, setNewMessage] = useState('')
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editingContent, setEditingContent] = useState('')
+  const [messageReactions, setMessageReactions] = useState<{
+    [key: string]: { [emoji: string]: number }
+  }>({})
+  const [userReactions, setUserReactions] = useState<{
+    [key: string]: string[]
+  }>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const { getMessages, sendMessage, subscribeToMessages } = useSupabase()
+  const {
+    getMessages,
+    sendMessage,
+    subscribeToMessages,
+    editMessage,
+    deleteMessage,
+    addReaction,
+    removeReaction,
+    getReactions,
+  } = useSupabase()
 
   // Scroll to bottom when messages change
   const scrollToBottom = () => {
@@ -36,6 +56,12 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
         setLoading(true)
         const data = await getMessages(channel.id)
         setMessages(data)
+
+        // Load reactions for all messages
+        for (const msg of data) {
+          const reactions = await getReactions(msg.id)
+          updateReactionCounts(msg.id, reactions)
+        }
       } catch (error) {
         toast.error('Failed to load messages')
       } finally {
@@ -44,7 +70,7 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
     }
 
     loadMessages()
-  }, [channel, getMessages])
+  }, [channel, getMessages, getReactions])
 
   // Subscribe to real-time updates
   useEffect(() => {
@@ -65,17 +91,10 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
     if (!newMessage.trim() || !channel) return
 
     try {
-      console.log('Sending message:', {
-        channelId: channel.id,
-        userId,
-        content: newMessage,
-      })
-
       await sendMessage(channel.id, newMessage, userId)
       setNewMessage('')
       toast.success('Message sent!')
 
-      // Reload messages immediately after sending
       const updatedMessages = await getMessages(channel.id)
       setMessages(updatedMessages)
     } catch (error) {
@@ -88,15 +107,124 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
     }
   }
 
-  // Format timestamp: Show sender's timezone + viewer's local time
+  const handleEditMessage = async (messageId: string, newContent: string) => {
+    if (!newContent.trim()) {
+      toast.error('Message cannot be empty')
+      return
+    }
+
+    try {
+      await editMessage(messageId, newContent)
+      setEditingMessageId(null)
+      setEditingContent('')
+      toast.success('Message edited!')
+
+      const updatedMessages = await getMessages(channel!.id)
+      setMessages(updatedMessages)
+    } catch (error) {
+      console.error('Edit message error:', error)
+      toast.error('Failed to edit message')
+    }
+  }
+
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!window.confirm('Are you sure you want to delete this message?')) {
+      return
+    }
+
+    try {
+      await deleteMessage(messageId)
+      toast.success('Message deleted!')
+
+      const updatedMessages = await getMessages(channel!.id)
+      setMessages(updatedMessages)
+    } catch (error) {
+      console.error('Delete message error:', error)
+      toast.error('Failed to delete message')
+    }
+  }
+
+  const handleAddReaction = async (messageId: string, emoji: string) => {
+    try {
+      // Check if user already has a reaction on this message
+      const userExistingReaction = userReactions[messageId]?.[0]
+
+      // If they already reacted with this emoji, remove it (toggle)
+      if (userReactions[messageId]?.includes(emoji)) {
+        await removeReaction(messageId, emoji, userId)
+        const reactions = await getReactions(messageId)
+        updateReactionCounts(messageId, reactions)
+        return
+      }
+
+      // If user already has a reaction with a DIFFERENT emoji, remove the old one first
+      if (userExistingReaction && userExistingReaction !== emoji) {
+        await removeReaction(messageId, userExistingReaction, userId)
+      }
+
+      // Now add the new reaction
+      await addReaction(messageId, emoji, userId)
+
+      const reactions = await getReactions(messageId)
+      updateReactionCounts(messageId, reactions)
+    } catch (error) {
+      console.error('Add reaction error:', error)
+      toast.error('Failed to add reaction')
+    }
+  }
+
+  const handleRemoveReaction = async (messageId: string, emoji: string) => {
+    try {
+      await removeReaction(messageId, emoji, userId)
+
+      const reactions = await getReactions(messageId)
+      updateReactionCounts(messageId, reactions)
+    } catch (error) {
+      console.error('Remove reaction error:', error)
+      toast.error('Failed to remove reaction')
+    }
+  }
+
+  const updateReactionCounts = (messageId: string, reactions: any[]) => {
+    const counts: { [emoji: string]: number } = {}
+    const userReact: string[] = []
+
+    reactions.forEach((r) => {
+      counts[r.emoji] = (counts[r.emoji] || 0) + 1
+      if (r.user_id === userId) {
+        userReact.push(r.emoji)
+      }
+    })
+
+    setMessageReactions((prev) => ({
+      ...prev,
+      [messageId]: counts,
+    }))
+
+    setUserReactions((prev) => ({
+      ...prev,
+      [messageId]: userReact,
+    }))
+  }
+
+  const isMessageEditable = (message: Message): boolean => {
+    if (message.user_id !== userId) return false
+    if (message.deleted) return false
+
+    const createdTime = new Date(message.created_at).getTime()
+    const now = new Date().getTime()
+    const diffMinutes = (now - createdTime) / (1000 * 60)
+
+    return diffMinutes < EDIT_WINDOW_MINUTES
+  }
+
+  const isMessageDeletable = (message: Message): boolean => {
+    return message.user_id === userId && !message.deleted
+  }
+
   const formatTimestamp = (message: Message) => {
-    // Parse UTC timestamp from database
     const utcDate = new Date(message.created_at)
 
-    // Get viewer's current timezone
-    const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone
-
-    // Show the time in SENDER's timezone
     const senderTimeStr = utcDate.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -107,7 +235,7 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
       timeZone: message.sender_timezone || 'UTC',
     })
 
-    // Show the time in VIEWER's timezone (in parentheses for context)
+    const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone
     const viewerTimeStr = utcDate.toLocaleString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
@@ -148,17 +276,134 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
           </div>
         ) : (
           messages.map((message) => (
-            <div key={message.id} className="flex gap-3">
-              <div className="flex-1">
-                <div className="flex items-baseline gap-2">
-                  <span className="font-semibold text-gray-900">
-                    {message.user?.email || 'Unknown'}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    {formatTimestamp(message)}
-                  </span>
+            <div
+              key={message.id}
+              className="group hover:bg-gray-50 rounded-lg p-3 transition-colors"
+            >
+              <div className="flex justify-between items-start gap-3">
+                <div className="flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-semibold text-gray-900">
+                      {message.user?.email || 'Unknown'}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {formatTimestamp(message)}
+                    </span>
+                    {message.edited_at && (
+                      <span className="text-xs text-gray-400 italic">(edited)</span>
+                    )}
+                  </div>
+
+                  {/* Message Content or Edit Box */}
+                  {editingMessageId === message.id ? (
+                    <div className="mt-2 flex gap-2">
+                      <textarea
+                        value={editingContent}
+                        onChange={(e) => setEditingContent(e.target.value)}
+                        className="flex-1 p-2 border border-blue-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        rows={2}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() =>
+                            handleEditMessage(message.id, editingContent)
+                          }
+                          className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingMessageId(null)}
+                          className="px-3 py-2 bg-gray-300 text-gray-900 rounded text-sm hover:bg-gray-400"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p
+                      className={`text-gray-700 mt-1 ${
+                        message.deleted ? 'italic text-gray-400' : ''
+                      }`}
+                    >
+                      {message.deleted ? 'Message deleted' : message.content}
+                    </p>
+                  )}
+
+                  {/* Reactions Bar */}
+                  {!message.deleted && (messageReactions[message.id] || userReactions[message.id]) && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {Object.entries(messageReactions[message.id] || {}).map(
+                        ([emoji, count]) => (
+                          <button
+                            key={emoji}
+                            onClick={() => {
+                              if (
+                                userReactions[message.id]?.includes(emoji)
+                              ) {
+                                handleRemoveReaction(message.id, emoji)
+                              } else {
+                                handleAddReaction(message.id, emoji)
+                              }
+                            }}
+                            className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${
+                              userReactions[message.id]?.includes(emoji)
+                                ? 'bg-blue-200 text-blue-900'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }`}
+                          >
+                            {emoji} {count}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  )}
                 </div>
-                <p className="text-gray-700 mt-1">{message.content}</p>
+
+                {/* Edit/Delete/React Buttons */}
+                {!message.deleted && (
+                  <div className="hidden group-hover:flex flex-col gap-1">
+                    {isMessageEditable(message) && (
+                      <button
+                        onClick={() => {
+                          setEditingMessageId(message.id)
+                          setEditingContent(message.content)
+                        }}
+                        className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                        title="Edit (within 15 minutes)"
+                      >
+                        ✏️ Edit
+                      </button>
+                    )}
+
+                    {isMessageDeletable(message) && (
+                      <button
+                        onClick={() => handleDeleteMessage(message.id)}
+                        className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                      >
+                        🗑️ Delete
+                      </button>
+                    )}
+
+                    {/* Emoji Picker */}
+                    <div className="flex gap-1 flex-wrap">
+                      {EMOJI_REACTIONS.map((emoji) => (
+                        <button
+                          key={emoji}
+                          onClick={() => handleAddReaction(message.id, emoji)}
+                          className={`text-lg hover:scale-125 transition-transform ${
+                            userReactions[message.id]?.includes(emoji)
+                              ? 'ring-2 ring-blue-400 rounded-full p-1'
+                              : ''
+                          }`}
+                          title={`React with ${emoji}`}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ))
