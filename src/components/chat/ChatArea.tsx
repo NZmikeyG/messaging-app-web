@@ -1,20 +1,19 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import toast from 'react-hot-toast'
-import type { Message, Channel } from '@/types'
+import type { Message, Channel, MessageReaction } from '@/types'
 import { useSupabase } from '@/hooks/useSupabase'
 
 interface ChatAreaProps {
   channel: Channel | null
   userId: string
-  userEmail: string
 }
 
 const EMOJI_REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '👏', '😢', '🤔']
 const EDIT_WINDOW_MINUTES = 15
 
-export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
+export function ChatArea({ channel, userId }: ChatAreaProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(false)
   const [newMessage, setNewMessage] = useState('')
@@ -39,13 +38,38 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
   } = useSupabase()
 
   // Scroll to bottom when messages change
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  }, [])
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages])
+  }, [messages, scrollToBottom])
+
+  const updateReactionCounts = useCallback(
+    (messageId: string, reactions: MessageReaction[]) => {
+      const counts: { [emoji: string]: number } = {}
+      const userReact: string[] = []
+
+      reactions.forEach((r) => {
+        counts[r.emoji] = (counts[r.emoji] || 0) + 1
+        if (r.user_id === userId) {
+          userReact.push(r.emoji)
+        }
+      })
+
+      setMessageReactions((prev) => ({
+        ...prev,
+        [messageId]: counts,
+      }))
+
+      setUserReactions((prev) => ({
+        ...prev,
+        [messageId]: userReact,
+      }))
+    },
+    [userId]
+  )
 
   // Load messages when channel changes
   useEffect(() => {
@@ -62,7 +86,8 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
           const reactions = await getReactions(msg.id)
           updateReactionCounts(msg.id, reactions)
         }
-      } catch (error) {
+      } catch (err) {
+        console.error('Failed to load messages:', err)
         toast.error('Failed to load messages')
       } finally {
         setLoading(false)
@@ -70,7 +95,7 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
     }
 
     loadMessages()
-  }, [channel, getMessages, getReactions])
+  }, [channel, getMessages, getReactions, updateReactionCounts])
 
   // Subscribe to real-time updates
   useEffect(() => {
@@ -97,11 +122,11 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
 
       const updatedMessages = await getMessages(channel.id)
       setMessages(updatedMessages)
-    } catch (error) {
-      console.error('Send message error:', error)
+    } catch (err) {
+      console.error('Send message error:', err)
       toast.error(
         `Failed to send message: ${
-          error instanceof Error ? error.message : 'Unknown error'
+          err instanceof Error ? err.message : 'Unknown error'
         }`
       )
     }
@@ -121,8 +146,8 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
 
       const updatedMessages = await getMessages(channel!.id)
       setMessages(updatedMessages)
-    } catch (error) {
-      console.error('Edit message error:', error)
+    } catch (err) {
+      console.error('Edit message error:', err)
       toast.error('Failed to edit message')
     }
   }
@@ -138,8 +163,8 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
 
       const updatedMessages = await getMessages(channel!.id)
       setMessages(updatedMessages)
-    } catch (error) {
-      console.error('Delete message error:', error)
+    } catch (err) {
+      console.error('Delete message error:', err)
       toast.error('Failed to delete message')
     }
   }
@@ -167,8 +192,8 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
 
       const reactions = await getReactions(messageId)
       updateReactionCounts(messageId, reactions)
-    } catch (error) {
-      console.error('Add reaction error:', error)
+    } catch (err) {
+      console.error('Add reaction error:', err)
       toast.error('Failed to add reaction')
     }
   }
@@ -179,32 +204,10 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
 
       const reactions = await getReactions(messageId)
       updateReactionCounts(messageId, reactions)
-    } catch (error) {
-      console.error('Remove reaction error:', error)
+    } catch (err) {
+      console.error('Remove reaction error:', err)
       toast.error('Failed to remove reaction')
     }
-  }
-
-  const updateReactionCounts = (messageId: string, reactions: any[]) => {
-    const counts: { [emoji: string]: number } = {}
-    const userReact: string[] = []
-
-    reactions.forEach((r) => {
-      counts[r.emoji] = (counts[r.emoji] || 0) + 1
-      if (r.user_id === userId) {
-        userReact.push(r.emoji)
-      }
-    })
-
-    setMessageReactions((prev) => ({
-      ...prev,
-      [messageId]: counts,
-    }))
-
-    setUserReactions((prev) => ({
-      ...prev,
-      [messageId]: userReact,
-    }))
   }
 
   const isMessageEditable = (message: Message): boolean => {
@@ -331,33 +334,35 @@ export function ChatArea({ channel, userId, userEmail }: ChatAreaProps) {
                   )}
 
                   {/* Reactions Bar */}
-                  {!message.deleted && (messageReactions[message.id] || userReactions[message.id]) && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {Object.entries(messageReactions[message.id] || {}).map(
-                        ([emoji, count]) => (
-                          <button
-                            key={emoji}
-                            onClick={() => {
-                              if (
+                  {!message.deleted &&
+                    (messageReactions[message.id] ||
+                      userReactions[message.id]) && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {Object.entries(messageReactions[message.id] || {}).map(
+                          ([emoji, count]) => (
+                            <button
+                              key={emoji}
+                              onClick={() => {
+                                if (
+                                  userReactions[message.id]?.includes(emoji)
+                                ) {
+                                  handleRemoveReaction(message.id, emoji)
+                                } else {
+                                  handleAddReaction(message.id, emoji)
+                                }
+                              }}
+                              className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${
                                 userReactions[message.id]?.includes(emoji)
-                              ) {
-                                handleRemoveReaction(message.id, emoji)
-                              } else {
-                                handleAddReaction(message.id, emoji)
-                              }
-                            }}
-                            className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${
-                              userReactions[message.id]?.includes(emoji)
-                                ? 'bg-blue-200 text-blue-900'
-                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                          >
-                            {emoji} {count}
-                          </button>
-                        )
-                      )}
-                    </div>
-                  )}
+                                  ? 'bg-blue-200 text-blue-900'
+                                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                              }`}
+                            >
+                              {emoji} {count}
+                            </button>
+                          )
+                        )}
+                      </div>
+                    )}
                 </div>
 
                 {/* Edit/Delete/React Buttons */}

@@ -5,7 +5,6 @@ import type { Channel, Message, MessageReaction } from '@/types'
 export function useSupabase() {
   const supabase = createClient()
 
-  // Get all channels
   const getChannels = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -21,7 +20,6 @@ export function useSupabase() {
     }
   }, [supabase])
 
-  // Get messages for a channel
   const getMessages = useCallback(
     async (channelId: string) => {
       try {
@@ -41,11 +39,9 @@ export function useSupabase() {
           ...msg,
           user: {
             id: msg.user_id,
-            email: msg.user_id === authUser?.id ? authUser.email : 'Unknown User',
+            email: msg.user_id === authUser?.id && authUser ? authUser.email : 'Unknown User',
           },
         })) || []
-
-        console.log('Messages with users:', messagesWithUsers)
 
         return messagesWithUsers as Message[]
       } catch (error) {
@@ -56,7 +52,6 @@ export function useSupabase() {
     [supabase]
   )
 
-  // Send a message
   const sendMessage = useCallback(
     async (channelId: string, content: string, userId: string) => {
       try {
@@ -78,7 +73,6 @@ export function useSupabase() {
           throw error
         }
 
-        console.log('Message inserted with timezone:', userTimezone)
         return data
       } catch (error) {
         console.error('sendMessage error:', error)
@@ -88,7 +82,6 @@ export function useSupabase() {
     [supabase]
   )
 
-  // Edit a message (only own messages)
   const editMessage = useCallback(
     async (messageId: string, newContent: string) => {
       try {
@@ -105,7 +98,6 @@ export function useSupabase() {
           throw error
         }
 
-        console.log('Message edited:', messageId)
         return data
       } catch (error) {
         console.error('editMessage error:', error)
@@ -115,7 +107,6 @@ export function useSupabase() {
     [supabase]
   )
 
-  // Delete a message (soft delete)
   const deleteMessage = useCallback(
     async (messageId: string) => {
       try {
@@ -129,7 +120,6 @@ export function useSupabase() {
           throw error
         }
 
-        console.log('Message deleted:', messageId)
         return data
       } catch (error) {
         console.error('deleteMessage error:', error)
@@ -139,7 +129,6 @@ export function useSupabase() {
     [supabase]
   )
 
-  // Add reaction to message
   const addReaction = useCallback(
     async (messageId: string, emoji: string, userId: string) => {
       try {
@@ -153,14 +142,12 @@ export function useSupabase() {
 
         if (error) {
           if (error.code === '23505') {
-            console.log('Reaction already exists')
             return null
           }
           console.error('Add reaction error:', error)
           throw error
         }
 
-        console.log('Reaction added:', emoji)
         return data
       } catch (error) {
         console.error('addReaction error:', error)
@@ -170,7 +157,6 @@ export function useSupabase() {
     [supabase]
   )
 
-  // Remove reaction from message
   const removeReaction = useCallback(
     async (messageId: string, emoji: string, userId: string) => {
       try {
@@ -186,7 +172,6 @@ export function useSupabase() {
           throw error
         }
 
-        console.log('Reaction removed:', emoji)
         return data
       } catch (error) {
         console.error('removeReaction error:', error)
@@ -196,7 +181,6 @@ export function useSupabase() {
     [supabase]
   )
 
-  // Get reactions for a message
   const getReactions = useCallback(
     async (messageId: string) => {
       try {
@@ -216,21 +200,19 @@ export function useSupabase() {
     [supabase]
   )
 
-  // Subscribe to messages in real-time
   const subscribeToMessages = useCallback(
     (channelId: string, callback: (message: Message) => void) => {
       const subscription = supabase
         .channel(`messages:${channelId}`)
         .on(
-          'postgres_changes',
+          'postgres_changes' as never,
           {
-            event: '*',
+            event: 'INSERT',
             schema: 'public',
             table: 'messages',
             filter: `channel_id=eq.${channelId}`,
           },
-          (payload: any) => {
-            console.log('Real-time message:', payload)
+          (payload: { new?: Message; old?: Message; eventType: string }) => {
             if (payload.new) {
               callback(payload.new as Message)
             }

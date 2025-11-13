@@ -11,7 +11,7 @@ import { useSupabase } from '@/hooks/useSupabase'
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<{ id: string; email: string } | null>(null)
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
   const [loading, setLoading] = useState(true)
@@ -29,7 +29,7 @@ export default function DashboardPage() {
         return
       }
 
-      setUser(user)
+      setUser(user as { id: string; email: string })
       setLoading(false)
     }
 
@@ -45,8 +45,8 @@ export default function DashboardPage() {
         const channels = await getChannels()
         const channel = channels.find((c) => c.id === selectedChannelId)
         setSelectedChannel(channel || null)
-      } catch (error) {
-        console.error('Failed to load channel:', error)
+      } catch (err) {
+        console.error('Failed to load channel:', err)
       }
     }
 
@@ -87,11 +87,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Chat Area */}
-        <ChatArea
-          channel={selectedChannel}
-          userId={user.id}
-          userEmail={user.email}
-        />
+        <ChatArea channel={selectedChannel} userId={user.id} />
       </div>
     </div>
   )

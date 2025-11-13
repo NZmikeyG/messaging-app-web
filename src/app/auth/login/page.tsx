@@ -33,7 +33,8 @@ export default function LoginPage() {
       toast.success('Logged in successfully!')
       router.push('/dashboard')
       router.refresh()
-    } catch (error) {
+    } catch (err) {
+      console.error('Login error:', err)
       toast.error('An error occurred. Please try again.')
       setLoading(false)
     }
@@ -100,7 +101,7 @@ export default function LoginPage() {
 
           <div className="border-t border-gray-200 px-6 py-4 text-center">
             <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
               <Link
                 href="/auth/signup"
                 className="text-blue-600 hover:text-blue-700 font-semibold"
