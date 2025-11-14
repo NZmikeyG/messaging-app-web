@@ -1,179 +1,211 @@
 'use client'
 
 import React, { useState } from 'react'
+import { useUserStore } from '@/store/useUserStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useUserProfile } from '@/hooks/useUserProfile'
-import { useUserStore } from '@/store/useUserStore'
 
-export const SettingsPage: React.FC = () => {
+export default function SettingsPage() {
   const settings = useSettingsStore((state) => state.settings)
   const updateSetting = useSettingsStore((state) => state.updateSetting)
   const profile = useUserStore((state) => state.profile)
-  const { updateProfile, loading } = useUserProfile()
+  const { updateProfile } = useUserProfile()
 
+  const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [isSaving, setIsSaving] = useState(false)
+  const [formData, setFormData] = useState({
+    username: profile?.username || '',
+    email: profile?.email || '',
+    displayName: profile?.display_name || '',
+    bio: profile?.bio || '',
+    theme: settings.theme,
+    notifications: settings.notifications,
+  })
 
-  const timezones = [
-    'UTC',
-    'GMT',
-    'America/New_York',
-    'America/Chicago',
-    'America/Denver',
-    'America/Los_Angeles',
-    'Europe/London',
-    'Europe/Paris',
-    'Europe/Berlin',
-    'Asia/Tokyo',
-    'Asia/Shanghai',
-    'Asia/Hong_Kong',
-    'Asia/Singapore',
-    'Australia/Sydney',
-    'Pacific/Auckland',
-  ]
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const { name, value, type } = e.currentTarget
+    if (type === 'checkbox') {
+      setFormData(prev => ({
+        ...prev,
+        [name]: (e.currentTarget as HTMLInputElement).checked,
+      }))
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value,
+      }))
+    }
+  }
 
-  const handleSaveSettings = async () => {
+  const handleSaveProfile = async () => {
     setSaveError(null)
+    setSaveSuccess(false)
     setIsSaving(true)
 
     try {
-      if (!profile?.id) {
-        throw new Error('No profile loaded')
-      }
-
-      // Save to database
       await updateProfile({
-        theme: settings.theme,
-        timezone: settings.timezone,
-        notifications_enabled: settings.notifications_enabled,
+        username: formData.username,
+        email: formData.email,
+        display_name: formData.displayName,
+        bio: formData.bio,
       })
-
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to save settings'
-      setSaveError(message)
+      setSaveError(err instanceof Error ? err.message : 'Failed to save profile')
     } finally {
       setIsSaving(false)
     }
   }
 
-  const handleThemeChange = (newTheme: 'light' | 'dark') => {
-    updateSetting('theme', newTheme)
-    // Apply theme to document
-    if (newTheme === 'dark') {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
+  const handleSaveSettings = () => {
+    updateSetting('theme', formData.theme)
+    updateSetting('notifications', formData.notifications)
+    setSaveSuccess(true)
+    setTimeout(() => setSaveSuccess(false), 3000)
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Settings</h1>
+    <div className="min-h-screen bg-black text-white p-6">
+      <div className="max-w-2xl mx-auto">
+        <h1 className="text-3xl font-bold mb-8">Settings</h1>
 
-      {/* Success Message */}
-      {saveSuccess && (
-        <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg">
-          ✓ Settings saved successfully!
-        </div>
-      )}
+        {/* Profile Section */}
+        <div className="bg-gray-900 rounded-lg p-6 mb-6">
+          <h2 className="text-2xl font-semibold mb-4">Profile</h2>
 
-      {/* Error Message */}
-      {saveError && (
-        <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-          ✗ {saveError}
-        </div>
-      )}
-
-      <div className="space-y-6">
-        {/* Appearance Section */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Appearance</h2>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Theme
-            </label>
-            <div className="flex gap-4">
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  name="theme"
-                  value="light"
-                  checked={settings.theme === 'light'}
-                  onChange={() => handleThemeChange('light')}
-                  className="w-4 h-4"
-                />
-                <span className="ml-2 text-sm text-gray-700">Light</span>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="username" className="block text-sm font-medium mb-1">
+                Username
               </label>
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  name="theme"
-                  value="dark"
-                  checked={settings.theme === 'dark'}
-                  onChange={() => handleThemeChange('dark')}
-                  className="w-4 h-4"
-                />
-                <span className="ml-2 text-sm text-gray-700">Dark</span>
+              <input
+                id="username"
+                type="text"
+                name="username"
+                value={formData.username}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter your username"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium mb-1">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter your email"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="displayName" className="block text-sm font-medium mb-1">
+                Display Name
+              </label>
+              <input
+                id="displayName"
+                type="text"
+                name="displayName"
+                value={formData.displayName}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter your display name"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="bio" className="block text-sm font-medium mb-1">
+                Bio
+              </label>
+              <textarea
+                id="bio"
+                name="bio"
+                value={formData.bio}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter your bio"
+                rows={4}
+              />
+            </div>
+
+            <button
+              onClick={handleSaveProfile}
+              disabled={isSaving}
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+            >
+              {isSaving ? 'Saving...' : 'Save Profile'}
+            </button>
+          </div>
+        </div>
+
+        {/* Preferences Section */}
+        <div className="bg-gray-900 rounded-lg p-6 mb-6">
+          <h2 className="text-2xl font-semibold mb-4">Preferences</h2>
+
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="theme" className="block text-sm font-medium mb-1">
+                Theme
+              </label>
+              <select
+                id="theme"
+                name="theme"
+                value={formData.theme}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+                <option value="auto">Auto</option>
+              </select>
+            </div>
+
+            <div className="flex items-center">
+              <input
+                id="notifications"
+                type="checkbox"
+                name="notifications"
+                checked={formData.notifications}
+                onChange={handleInputChange}
+                className="w-4 h-4 bg-gray-800 border border-gray-700 rounded focus:ring-2 focus:ring-blue-500"
+              />
+              <label htmlFor="notifications" className="ml-2 text-sm font-medium">
+                Enable notifications
               </label>
             </div>
-          </div>
-        </div>
 
-        {/* Location Section */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Location</h2>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Timezone
-            </label>
-            <select
-              value={settings.timezone}
-              onChange={(e) => updateSetting('timezone', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <button
+              onClick={handleSaveSettings}
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
             >
-              {timezones.map((tz) => (
-                <option key={tz} value={tz}>
-                  {tz}
-                </option>
-              ))}
-            </select>
+              Save Preferences
+            </button>
           </div>
         </div>
 
-        {/* Notifications Section */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Notifications</h2>
-          <label className="flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={settings.notifications_enabled}
-              onChange={(e) =>
-                updateSetting('notifications_enabled', e.target.checked)
-              }
-              className="w-4 h-4 rounded"
-            />
-            <span className="ml-3 text-sm text-gray-700">
-              Enable in-app notifications
-            </span>
-          </label>
-          <p className="text-xs text-gray-500 mt-2">
-            When enabled, you'll receive notifications for mentions and messages
-          </p>
-        </div>
+        {/* Success Message */}
+        {saveSuccess && (
+          <div className="p-4 bg-green-900 border border-green-700 rounded-lg text-green-100 mb-4">
+            Changes saved successfully!
+          </div>
+        )}
 
-        {/* Save Button */}
-        <div className="flex justify-end gap-3">
-          <button
-            onClick={handleSaveSettings}
-            disabled={isSaving || loading}
-            className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSaving || loading ? 'Saving...' : 'Save Settings'}
-          </button>
-        </div>
+        {/* Error Message */}
+        {saveError && (
+          <div className="p-4 bg-red-900 border border-red-700 rounded-lg text-red-100 mb-4">
+            {saveError}
+          </div>
+        )}
       </div>
     </div>
   )
