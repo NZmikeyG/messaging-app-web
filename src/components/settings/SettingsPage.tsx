@@ -17,24 +17,16 @@ export default function SettingsPage() {
   const [formData, setFormData] = useState({
     username: profile?.username || '',
     theme: settings.theme,
-    notifications: settings.notifications,
   })
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
-    const { name, value, type } = e.currentTarget
-    if (type === 'checkbox') {
-      setFormData(prev => ({
-        ...prev,
-        [name]: (e.currentTarget as HTMLInputElement).checked,
-      }))
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value,
-      }))
-    }
+    const { name, value } = e.currentTarget
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+    }))
   }
 
   const handleSaveProfile = async () => {
@@ -57,7 +49,6 @@ export default function SettingsPage() {
 
   const handleSaveSettings = () => {
     updateSetting('theme', formData.theme)
-    updateSetting('notifications', formData.notifications)
     setSaveSuccess(true)
     setTimeout(() => setSaveSuccess(false), 3000)
   }
@@ -117,20 +108,6 @@ export default function SettingsPage() {
                 <option value="light">Light</option>
                 <option value="auto">Auto</option>
               </select>
-            </div>
-
-            <div className="flex items-center">
-              <input
-                id="notifications"
-                type="checkbox"
-                name="notifications"
-                checked={formData.notifications}
-                onChange={handleInputChange}
-                className="w-4 h-4 bg-gray-800 border border-gray-700 rounded focus:ring-2 focus:ring-blue-500"
-              />
-              <label htmlFor="notifications" className="ml-2 text-sm font-medium">
-                Enable notifications
-              </label>
             </div>
 
             <button
