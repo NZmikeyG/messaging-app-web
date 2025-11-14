@@ -17,15 +17,35 @@ const ALL_EMOJIS = [
   '😊', '😢', '😍', '🥰', '😎', '🤯', '💥', '😇', '💀', '😬', '🤓', '😡', '🤮', '😴',
 ]
 
+interface Message {
+  id: string
+  content: string
+  created_at: string
+  user_id: string
+  profiles: {
+    username: string
+  }
+}
+
+interface Reaction {
+  id: string
+  message_id: string
+  user_id: string
+  emoji: string
+  created_at: string
+}
+
+interface ChannelInfo {
+  name?: string
+}
+
 export default function ChannelMessagesPage() {
   const params = useParams()
   const channelId = params.id as string
 
-  const [channelInfo, setChannelInfo] = useState<{name?: string}|null>(null)
-  const [messages, setMessages] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [reactions, setReactions] = useState<any[]>([])
+  const [channelInfo, setChannelInfo] = useState<ChannelInfo | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [reactions, setReactions] = useState<Reaction[]>([])
   const [messageText, setMessageText] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
@@ -49,16 +69,16 @@ export default function ChannelMessagesPage() {
 
   useEffect(() => {
     const fetchMessages = async () => {
-      setLoading(true)
-      setError(null)
       const { data, error } = await supabase
         .from('messages')
         .select('id, content, created_at, user_id, profiles(username)')
         .eq('channel_id', channelId)
         .order('created_at', { ascending: true })
-      if (error) setError(error.message)
-      else setMessages(data ?? [])
-      setLoading(false)
+      if (error) {
+        console.error('Failed to fetch messages:', error.message)
+      } else {
+        setMessages(data ?? [])
+      }
     }
     fetchMessages()
   }, [channelId])
@@ -155,7 +175,7 @@ export default function ChannelMessagesPage() {
                 }
                 acc[r.emoji].push(r)
                 return acc
-              }, {} as Record<string, any[]>)
+              }, {} as Record<string, Reaction[]>)
 
             return (
               <li
@@ -204,7 +224,7 @@ export default function ChannelMessagesPage() {
                               : 'bg-gray-100 hover:bg-gray-200'
                             }`}
                           type="button"
-                          title={reactedByMe ? "Remove reaction" : "Add reaction"}
+                          title={reactedByMe ? 'Remove reaction' : 'Add reaction'}
                         >
                           <span>{emoji}</span>
                         </button>
