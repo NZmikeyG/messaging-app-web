@@ -1,12 +1,8 @@
+'use client'
+
 import { useEffect, useRef } from 'react'
-import { createClient } from '@supabase/supabase-js'
 import { useUserStore, type UserPresence } from '@/store/useUserStore'
 import React from 'react'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 
 export const usePresence = (userId: string | undefined) => {
   const { setPresence, setError } = useUserStore()
@@ -19,6 +15,12 @@ export const usePresence = (userId: string | undefined) => {
     // Initial presence update
     const updatePresence = async () => {
       try {
+        const { createClient } = await import('@supabase/supabase-js')
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+
         const { error } = await supabase
           .from('user_presence')
           .upsert(
@@ -62,6 +64,12 @@ export const usePresence = (userId: string | undefined) => {
 
         const markOffline = async () => {
           try {
+            const { createClient } = await import('@supabase/supabase-js')
+            const supabase = createClient(
+              process.env.NEXT_PUBLIC_SUPABASE_URL!,
+              process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+            )
+
             await supabase
               .from('user_presence')
               .update({
@@ -93,6 +101,12 @@ export const useUserPresenceList = () => {
       setLoading(true)
       setError(null)
 
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+
       const { data, error: fetchError } = await supabase
         .from('user_presence')
         .select('*')
@@ -114,35 +128,51 @@ export const useUserPresenceList = () => {
     fetchPresenceList()
 
     // Subscribe to real-time presence changes
-    const subscription = supabase
-      .channel('user_presence')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_presence',
-        },
-        (payload) => {
-          if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
-            setPresenceList((prev) => {
-              const index = prev.findIndex((p) => p.user_id === (payload.new as UserPresence).user_id)
-              if (index > -1) {
-                return [
-                  ...prev.slice(0, index),
-                  payload.new as UserPresence,
-                  ...prev.slice(index + 1),
-                ]
+    let subscription: any = null
+
+    ;(async () => {
+      try {
+        const { createClient } = await import('@supabase/supabase-js')
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+
+        subscription = supabase
+          .channel('user_presence')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'user_presence',
+            },
+            (payload: any) => {
+              if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+                setPresenceList((prev) => {
+                  const index = prev.findIndex((p) => p.user_id === (payload.new as UserPresence).user_id)
+                  if (index > -1) {
+                    return [
+                      ...prev.slice(0, index),
+                      payload.new as UserPresence,
+                      ...prev.slice(index + 1),
+                    ]
+                  }
+                  return [payload.new as UserPresence, ...prev]
+                })
               }
-              return [payload.new as UserPresence, ...prev]
-            })
-          }
-        }
-      )
-      .subscribe()
+            }
+          )
+          .subscribe()
+      } catch (err) {
+        console.error('Error setting up subscription:', err)
+      }
+    })()
 
     return () => {
-      subscription.unsubscribe()
+      if (subscription) {
+        subscription.unsubscribe()
+      }
     }
   }, [fetchPresenceList])
 

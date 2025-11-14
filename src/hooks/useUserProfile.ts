@@ -1,54 +1,19 @@
 import { useCallback } from 'react'
-import { createClient } from '@supabase/supabase-js'
 import { useUserStore } from '@/store/useUserStore'
-import type { UserProfile } from '@/store/useUserStore'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import type { Profile } from '@/types'
 
 export const useUserProfile = () => {
   const { setProfile, setIsLoading, setError } = useUserStore()
 
-  // Fetch profile by user ID
-  const fetchProfile = useCallback(
-    async (userId: string) => {
-      try {
-        setIsLoading(true)
-        setError(null)
-
-        const { data, error: fetchError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .single()
-
-        if (fetchError) {
-          // Auto-create default profile if not found (optional)
-          if (fetchError.code === 'PGRST116') {
-            await createDefaultProfile(userId)
-          } else {
-            throw fetchError
-          }
-        } else {
-          setProfile(data as UserProfile)
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to fetch profile'
-        setError(message)
-        console.error('Error fetching profile:', err)
-      } finally {
-        setIsLoading(false)
-      }
-    },
-    [setProfile, setIsLoading, setError]
-  )
-
-  // Create default profile for new user
   const createDefaultProfile = useCallback(
     async (userId: string) => {
       try {
+        const { createClient } = await import('@supabase/supabase-js')
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+
         const { data: userAuth } = await supabase.auth.getUser()
         const userEmail = userAuth?.user?.email || 'user'
         const defaultUsername = `${userEmail.split('@')[0]}_${userId.slice(0, 6)}`
@@ -71,7 +36,7 @@ export const useUserProfile = () => {
 
         if (error) throw error
 
-        setProfile(data as UserProfile)
+        setProfile(data as Profile)
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to create profile'
         setError(message)
@@ -81,12 +46,55 @@ export const useUserProfile = () => {
     [setProfile, setError]
   )
 
-  // Update profile (with a guard!)
-  const updateProfile = useCallback(
-    async (updates: Partial<UserProfile>) => {
+  const fetchProfile = useCallback(
+    async (userId: string) => {
       try {
         setIsLoading(true)
         setError(null)
+
+        const { createClient } = await import('@supabase/supabase-js')
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+
+        const { data, error: fetchError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single()
+
+        if (fetchError) {
+          if (fetchError.code === 'PGRST116') {
+            await createDefaultProfile(userId)
+          } else {
+            throw fetchError
+          }
+        } else {
+          setProfile(data as Profile)
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch profile'
+        setError(message)
+        console.error('Error fetching profile:', err)
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [setProfile, setIsLoading, setError, createDefaultProfile]
+  )
+
+  const updateProfile = useCallback(
+    async (updates: Partial<Profile>) => {
+      try {
+        setIsLoading(true)
+        setError(null)
+
+        const { createClient } = await import('@supabase/supabase-js')
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
 
         const currentProfile = useUserStore.getState().profile
         if (!currentProfile || !currentProfile.id) {
@@ -102,9 +110,7 @@ export const useUserProfile = () => {
 
         if (error) throw error
 
-        // Set in Zustand so UI updates immediately
-        useUserStore.getState().setProfile(data as UserProfile)
-        // Optionally: await fetchProfile(currentProfile.id) for server roundtrip
+        useUserStore.getState().setProfile(data as Profile)
 
         return data
       } catch (err) {
@@ -118,14 +124,26 @@ export const useUserProfile = () => {
     [setIsLoading, setError]
   )
 
-  // Upload avatar logic (unchanged)
   const uploadAvatar = useCallback(
     async (file: File, userId: string) => {
       try {
         setIsLoading(true)
         setError(null)
-        if (file.size > 1024 * 1024) throw new Error('File size must be less than 1MB')
-        if (!file.type.startsWith('image/')) throw new Error('File must be an image')
+
+        if (file.size > 1024 * 1024) {
+          throw new Error('File size must be less than 1MB')
+        }
+
+        if (!file.type.startsWith('image/')) {
+          throw new Error('File must be an image')
+        }
+
+        const { createClient } = await import('@supabase/supabase-js')
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+
         const fileName = `${userId}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`
 
         const { error: uploadError } = await supabase.storage
@@ -150,19 +168,31 @@ export const useUserProfile = () => {
     [setIsLoading, setError, updateProfile]
   )
 
-  // Delete avatar logic (unchanged)
   const deleteAvatar = useCallback(
     async (avatarUrl: string) => {
       try {
         setIsLoading(true)
         setError(null)
+
+        const { createClient } = await import('@supabase/supabase-js')
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+
         const urlParts = avatarUrl.split('/storage/v1/object/public/avatars/')
-        if (!urlParts[1]) throw new Error('Invalid avatar URL')
+        if (!urlParts[1]) {
+          throw new Error('Invalid avatar URL')
+        }
+
+        const filePath = urlParts[1]
+
         const { error: deleteError } = await supabase.storage
           .from('avatars')
-          .remove([urlParts[1]])
+          .remove([filePath])
 
         if (deleteError) throw deleteError
+
         await updateProfile({ avatar_url: null })
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to delete avatar'

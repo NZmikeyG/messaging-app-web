@@ -9,8 +9,14 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+interface Channel {
+  id: string
+  name: string
+  created_at: string
+}
+
 export const ChannelList: React.FC = () => {
-  const [channels, setChannels] = useState<any[]>([])
+  const [channels, setChannels] = useState<Channel[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -21,7 +27,7 @@ export const ChannelList: React.FC = () => {
       setError(null)
       const { data, error } = await supabase.from('channels').select('*')
       if (error) setError(error.message)
-      else setChannels(data ?? [])
+      else setChannels((data as Channel[]) ?? [])
       setLoading(false)
     }
     fetchChannels()

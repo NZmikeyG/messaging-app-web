@@ -2,32 +2,38 @@
 
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@supabase/supabase-js'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import { usePresence } from '@/hooks/usePresence'
 import { useUserStore } from '@/store/useUserStore'
 import { UserProfileCard } from '@/components/profile/UserProfileCard'
 import { EditProfileModal } from '@/components/profile/EditProfileModal'
-import { ChannelList } from '@/components/ChannelList' // <-- Add this import
+import { ChannelList } from '@/components/ChannelList'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-export default function Dashboard() {
+function DashboardContent() {
   const router = useRouter()
   const { fetchProfile } = useUserProfile()
   const [showEditModal, setShowEditModal] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [userId, setUserId] = useState<string | undefined>(undefined)
+  const [mounted, setMounted] = useState(false)
   const profile = useUserStore((state) => state.profile)
+
+  // Call presence hook when userId is available
+  usePresence(userId)
 
   // Fetch session and profile on mount
   useEffect(() => {
     const initializeProfile = async () => {
       try {
         setIsLoading(true)
+
+        // Dynamic import - only in browser
+        const { createClient } = await import('@supabase/supabase-js')
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+
         const { data, error: sessionError } = await supabase.auth.getSession()
         if (sessionError) throw sessionError
 
@@ -40,18 +46,17 @@ export default function Dashboard() {
 
         setUserId(currentUserId)
         await fetchProfile(currentUserId)
-      } catch (err) {
+      } catch {
         // Any error falls back to auth redirect for security
         router.push('/auth/login')
       } finally {
         setIsLoading(false)
       }
     }
+    
+    setMounted(true)
     initializeProfile()
   }, [fetchProfile, router])
-
-  // Track presence (ONLY if logged in)
-  usePresence(userId)
 
   // Show loading spinner during session/profile load
   if (isLoading) {
@@ -91,8 +96,8 @@ export default function Dashboard() {
           onClose={() => setShowEditModal(false)}
         />
 
-        {/* ADD CHANNELS LIST HERE */}
-        <ChannelList />
+        {/* Channels List - Only render after mount */}
+        {mounted && <ChannelList />}
 
         {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -102,7 +107,7 @@ export default function Dashboard() {
               Welcome to Your Workspace
             </h2>
             <p className="text-gray-600 mb-4">
-              Your profile is all set up! Here's what you can do:
+              Your profile is all set up! Here&apos;s what you can do:
             </p>
             <ul className="space-y-2 text-gray-600">
               <li className="flex items-center gap-2">
@@ -144,4 +149,19 @@ export default function Dashboard() {
       </div>
     </div>
   )
+}
+
+export default function Dashboard() {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Only render after mount (browser-side only)
+  if (!mounted) {
+    return null
+  }
+
+  return <DashboardContent />
 }

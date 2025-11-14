@@ -1,14 +1,10 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import React, { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { createClient } from '@supabase/supabase-js'
 import { useUserStore } from '@/store/useUserStore'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 
 const INITIAL_FAVORITE_EMOJIS = ['👍', '😄', '🔥', '💯', '🙏', '🏀']
 const ALL_EMOJIS = [
@@ -55,12 +51,21 @@ export default function ChannelMessagesPage() {
 
   useEffect(() => {
     async function fetchChannel() {
-      const { data } = await supabase
-        .from('channels')
-        .select('name')
-        .eq('id', channelId)
-        .single()
-      if (data) setChannelInfo(data as ChannelInfo)
+      try {
+        const { createClient } = await import('@supabase/supabase-js')
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+        const { data } = await supabase
+          .from('channels')
+          .select('name')
+          .eq('id', channelId)
+          .single()
+        if (data) setChannelInfo(data as ChannelInfo)
+      } catch (err) {
+        console.error('Failed to fetch channel:', err)
+      }
     }
     fetchChannel()
   }, [channelId])
@@ -68,6 +73,12 @@ export default function ChannelMessagesPage() {
   useEffect(() => {
     const fetchMessages = async () => {
       try {
+        const { createClient } = await import('@supabase/supabase-js')
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+
         // Fetch messages
         const { data: messagesData, error: messagesError } = await supabase
           .from('messages')
@@ -112,11 +123,20 @@ export default function ChannelMessagesPage() {
   useEffect(() => {
     const fetchReactions = async () => {
       if (messages.length === 0) return
-      const { data } = await supabase
-        .from('message_reactions')
-        .select('*')
-        .in('message_id', messages.map(m => m.id))
-      setReactions((data as unknown as Reaction[]) ?? [])
+      try {
+        const { createClient } = await import('@supabase/supabase-js')
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+        const { data } = await supabase
+          .from('message_reactions')
+          .select('*')
+          .in('message_id', messages.map(m => m.id))
+        setReactions((data as unknown as Reaction[]) ?? [])
+      } catch (err) {
+        console.error('Error fetching reactions:', err)
+      }
     }
     fetchReactions()
   }, [messages])
@@ -132,6 +152,12 @@ export default function ChannelMessagesPage() {
     setSendError(null)
     setSending(true)
     try {
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+
       if (!messageText.trim()) throw new Error('Message cannot be empty')
       if (!userProfile?.id) throw new Error('User profile not loaded')
       await supabase
@@ -142,7 +168,7 @@ export default function ChannelMessagesPage() {
           content: messageText,
         }])
       setMessageText('')
-      
+
       // Refetch messages
       const { data: messagesData } = await supabase
         .from('messages')
@@ -175,31 +201,41 @@ export default function ChannelMessagesPage() {
 
   const handleToggleReaction = async (messageId: string, emoji: string) => {
     if (!userProfile?.id) return
-    const existing = reactions.find(
-      r => r.message_id === messageId && r.user_id === userProfile.id
-    )
-    if (existing) {
-      if (existing.emoji === emoji) {
-        await supabase.from('message_reactions').delete().eq('id', existing.id)
+    try {
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+
+      const existing = reactions.find(
+        r => r.message_id === messageId && r.user_id === userProfile.id
+      )
+      if (existing) {
+        if (existing.emoji === emoji) {
+          await supabase.from('message_reactions').delete().eq('id', existing.id)
+        } else {
+          await supabase.from('message_reactions').update({ emoji }).eq('id', existing.id)
+        }
       } else {
-        await supabase.from('message_reactions').update({ emoji }).eq('id', existing.id)
+        await supabase.from('message_reactions').insert([{
+          message_id: messageId,
+          user_id: userProfile.id,
+          emoji,
+        }])
       }
-    } else {
-      await supabase.from('message_reactions').insert([{
-        message_id: messageId,
-        user_id: userProfile.id,
-        emoji,
-      }])
+      setRecentEmojis(prev => {
+        const newList = [emoji, ...prev.filter(e => e !== emoji)]
+        return newList.slice(0, 6)
+      })
+      const { data } = await supabase
+        .from('message_reactions')
+        .select('*')
+        .in('message_id', messages.map(m => m.id))
+      setReactions((data as unknown as Reaction[]) ?? [])
+    } catch (err) {
+      console.error('Error toggling reaction:', err)
     }
-    setRecentEmojis(prev => {
-      const newList = [emoji, ...prev.filter(e => e !== emoji)]
-      return newList.slice(0, 6)
-    })
-    const { data } = await supabase
-      .from('message_reactions')
-      .select('*')
-      .in('message_id', messages.map(m => m.id))
-    setReactions((data as unknown as Reaction[]) ?? [])
   }
 
   return (
@@ -224,7 +260,7 @@ export default function ChannelMessagesPage() {
             return (
               <li
                 key={msg.id}
-                className="bg-white px-4 py-2 rounded-lg shadow border border-gray-200 flex flex-col group relative"
+                className="bg-white px-4 py-2 rounded-lg shadow border border-gray-200 flex flex-col relative hover:shadow-md transition-shadow"
                 onMouseEnter={(e) => {
                   const emojiBar = e.currentTarget.querySelector('.emoji-picker')
                   if (emojiBar) (emojiBar as HTMLElement).style.display = 'flex'
@@ -248,7 +284,7 @@ export default function ChannelMessagesPage() {
                   </div>
                   {/* Emoji Picker Bar - Hidden by default, shown on hover */}
                   <div 
-                    className="emoji-picker flex gap-1 flex-shrink-0"
+                    className="emoji-picker flex gap-1 shrink-0"
                     style={{ display: 'none' }}
                   >
                     {(showAllEmojis ? ALL_EMOJIS : recentEmojis).map(emoji => {

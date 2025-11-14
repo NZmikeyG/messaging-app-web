@@ -1,31 +1,39 @@
 {
   "name": "messaging-app-web",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "Slack-like messaging application with Next.js and Supabase",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
-    "build": "next build --webpack",
+    "dev": "next dev",
+    "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@supabase/auth-helpers-nextjs": "^0.10.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "next": "^15.0.0",
+    "@supabase/supabase-js": "^2.38.0",
     "@supabase/ssr": "^0.7.0",
-    "@supabase/supabase-js": "^2.81.1",
-    "next": "16.0.1",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
+    "zustand": "^4.4.1",
     "react-hot-toast": "^2.6.0",
-    "zustand": "^5.0.8"
+    "lucide-react": "^0.292.0",
+    "date-fns": "^2.30.0",
+    "axios": "^1.6.2"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9.39.1",
-    "eslint-config-next": "^16.0.1",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5.3.0",
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "@types/node": "^24.10.1",
+    "tailwindcss": "^4.0.0",
+    "postcss": "^8.5.6",
+    "autoprefixer": "^10.4.16",
+    "@tailwindcss/postcss": "^4.1.17",
+    "eslint": "^8.53.0",
+    "eslint-config-next": "^15.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.10.0",
+    "@typescript-eslint/parser": "^6.10.0"
   }
 }

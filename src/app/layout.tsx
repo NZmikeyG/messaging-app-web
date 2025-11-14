@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
+import { Providers } from './providers'
 
 export const metadata: Metadata = {
   title: 'Messaging App',
@@ -17,29 +18,31 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        {children}
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 3000,
-            style: {
-              background: '#363636',
-              color: '#fff',
-            },
-            success: {
+        <Providers>
+          {children}
+          <Toaster
+            position="top-right"
+            toastOptions={{
               duration: 3000,
               style: {
-                background: '#10b981',
+                background: '#363636',
+                color: '#fff',
               },
-            },
-            error: {
-              duration: 3000,
-              style: {
-                background: '#ef4444',
+              success: {
+                duration: 3000,
+                style: {
+                  background: '#10b981',
+                },
               },
-            },
-          }}
-        />
+              error: {
+                duration: 3000,
+                style: {
+                  background: '#ef4444',
+                },
+              },
+            }}
+          />
+        </Providers>
       </body>
     </html>
   )

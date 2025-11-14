@@ -1,74 +1,119 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useChannelStore } from '@/store/useChannelStore'
 import { useSupabase } from '@/hooks/useSupabase'
-import type { Channel } from '@/types'
-import toast from 'react-hot-toast'
+import ChannelList from './ChannelList'
+import { CreateChannelModal } from './CreateChannelModal'
+import './Sidebar.css'
 
-interface SidebarProps {
-  selectedChannelId: string | null
-  onSelectChannel: (channelId: string) => void
-}
+const Sidebar: React.FC = () => {
+  const {
+    channels,
+    setChannels,
+    addChannel,
+    isLoading,
+    setIsLoading,
+    setError,
+  } = useChannelStore()
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const { getChannels, createChannel } = useSupabase()
 
-export function Sidebar({ selectedChannelId, onSelectChannel }: SidebarProps) {
-  const [channels, setChannels] = useState<Channel[]>([])
-  const [loading, setLoading] = useState(true)
-  const { getChannels } = useSupabase()
-
+  // Load channels on mount
   useEffect(() => {
     const loadChannels = async () => {
       try {
-        setLoading(true)
+        setIsLoading(true)
         const data = await getChannels()
         setChannels(data)
-
-        if (data.length > 0 && !selectedChannelId) {
-          onSelectChannel(data[0].id)
-        }
-      } catch (err) {
-        console.error('Failed to load channels:', err)
-        toast.error('Failed to load channels')
+      } catch (error) {
+        setError(
+          error instanceof Error ? error.message : 'Failed to load channels'
+        )
       } finally {
-        setLoading(false)
+        setIsLoading(false)
       }
     }
 
     loadChannels()
-  }, [getChannels, selectedChannelId, onSelectChannel])
+  }, [getChannels, setChannels, setIsLoading, setError])
+
+  const channelTree = useChannelStore((state) => state.buildChannelTree?.() || [])
+
+  const handleCreateChannel = async (
+    name: string,
+    description?: string,
+    isPrivate?: boolean
+  ) => {
+    try {
+      setIsLoading(true)
+      const newChannel = await createChannel({
+        name,
+        description,
+        is_private: isPrivate,
+      })
+      addChannel(newChannel)
+      setIsCreateModalOpen(false)
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : 'Failed to create channel'
+      )
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
-    <div className="w-64 bg-gray-900 text-white flex flex-col">
-      {/* Header */}
-      <div className="p-4 border-b border-gray-700">
-        <h2 className="text-lg font-bold">Channels</h2>
+    <aside className="sidebar">
+      <div className="sidebar-header">
+        <h1 className="workspace-name">A1 Company Ltd.</h1>
+        <button
+          className="create-channel-btn"
+          onClick={() => setIsCreateModalOpen(true)}
+          title="Create new channel"
+        >
+          +
+        </button>
       </div>
 
-      {/* Channels List */}
-      <div className="flex-1 overflow-y-auto p-2">
-        {loading ? (
-          <div className="text-center py-4">
-            <p className="text-gray-400 text-sm">Loading channels...</p>
-          </div>
-        ) : channels.length === 0 ? (
-          <div className="text-center py-4">
-            <p className="text-gray-400 text-sm">No channels yet</p>
-          </div>
-        ) : (
-          channels.map((channel) => (
-            <button
-              key={channel.id}
-              onClick={() => onSelectChannel(channel.id)}
-              className={`w-full text-left px-3 py-2 rounded-lg mb-1 transition-colors ${
-                selectedChannelId === channel.id
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-300 hover:bg-gray-800'
-              }`}
-            >
-              <span className="font-medium">#{channel.name}</span>
-            </button>
-          ))
-        )}
-      </div>
-    </div>
+      <nav className="sidebar-nav">
+        <div className="nav-section">
+          <div className="nav-section-title">Home</div>
+          <a href="#" className="nav-item nav-item-home">
+            🏠 Home
+          </a>
+        </div>
+
+        <div className="nav-section">
+          <div className="nav-section-title">Channels</div>
+          {isLoading ? (
+            <div className="nav-item">Loading channels...</div>
+          ) : channels.length === 0 ? (
+            <div className="nav-item">No channels yet</div>
+          ) : (
+            <ChannelList channels={channelTree} />
+          )}
+        </div>
+
+        <div className="nav-section">
+          <div className="nav-section-title">Direct Messages</div>
+          <div className="nav-item">💬 DMs</div>
+        </div>
+
+        <div className="nav-section">
+          <div className="nav-section-title">Activity</div>
+          <div className="nav-item">📋 Activity</div>
+        </div>
+      </nav>
+
+      <CreateChannelModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onCreateChannel={handleCreateChannel}
+      />
+    </aside>
   )
 }
+
+export default Sidebar
