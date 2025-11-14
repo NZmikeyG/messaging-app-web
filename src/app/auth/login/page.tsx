@@ -1,120 +1,112 @@
 'use client'
 
-import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
-import toast from 'react-hot-toast'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
+    setError(null)
+    setIsLoading(true)
 
     try {
-      const supabase = createClient()
-
-      const { error } = await supabase.auth.signInWithPassword({
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
-      if (error) {
-        toast.error(error.message)
-        setLoading(false)
-        return
-      }
+      if (signInError) throw signInError
 
-      toast.success('Logged in successfully!')
+      // Redirect to dashboard
       router.push('/dashboard')
-      router.refresh()
     } catch (err) {
-      console.error('Login error:', err)
-      toast.error('An error occurred. Please try again.')
-      setLoading(false)
+      const message = err instanceof Error ? err.message : 'Failed to login'
+      setError(message)
+    } finally {
+      setIsLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
-      <div className="w-full max-w-md">
-        <div className="rounded-lg bg-white shadow-xl">
-          <div className="border-b border-gray-200 px-6 py-8">
-            <h1 className="text-3xl font-bold text-gray-900">Welcome Back</h1>
-            <p className="mt-2 text-gray-600">Sign in to your account</p>
-          </div>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            Sign in to your account
+          </h2>
+        </div>
 
-          <form onSubmit={handleLogin} className="space-y-6 px-6 py-8" suppressHydrationWarning>
+        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+          {error && (
+            <div className="p-3 bg-red-100 text-red-700 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
+
+          <div className="rounded-md shadow-sm -space-y-px">
             <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Email Address
+              <label htmlFor="email" className="sr-only">
+                Email address
               </label>
               <input
                 id="email"
                 type="email"
+                required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                placeholder="you@example.com"
-                required
-                disabled={loading}
-                suppressHydrationWarning
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                placeholder="Email address"
               />
             </div>
-
             <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-gray-700"
-              >
+              <label htmlFor="password" className="sr-only">
                 Password
               </label>
               <input
                 id="password"
                 type="password"
+                required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                placeholder="••••••••"
-                required
-                disabled={loading}
-                suppressHydrationWarning
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                placeholder="Password"
               />
             </div>
+          </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-blue-600 py-2 px-4 text-white font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? 'Signing in...' : 'Sign In'}
-            </button>
-          </form>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+          >
+            {isLoading ? 'Signing in...' : 'Sign in'}
+          </button>
 
-          <div className="border-t border-gray-200 px-6 py-4 text-center">
-            <p className="text-sm text-gray-600">
-              Don&apos;t have an account?{' '}
+          <div className="text-center">
+            <p className="text-gray-600 text-sm">
+              Don't have an account?{' '}
               <Link
                 href="/auth/signup"
-                className="text-blue-600 hover:text-blue-700 font-semibold"
+                className="font-medium text-blue-600 hover:text-blue-500"
               >
                 Sign up
               </Link>
             </p>
           </div>
-        </div>
-
-        <p className="mt-4 text-center text-xs text-gray-600">
-          By signing in, you agree to our Terms of Service and Privacy Policy
-        </p>
+        </form>
       </div>
     </div>
   )

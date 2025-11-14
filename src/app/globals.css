@@ -24,3 +24,18 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Emoji picker visibility on hover */
+.group:hover .emoji-picker {
+  display: flex !important;
+}
+
+.emoji-picker {
+  display: none !important;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .emoji-picker {
+    display: flex !important;
+  }
+}
