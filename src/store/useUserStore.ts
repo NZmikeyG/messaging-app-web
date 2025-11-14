@@ -12,7 +12,7 @@ export interface UserProfile {
   updated_at: string
 }
 
-interface UserPresence {
+export interface UserPresence {
   user_id: string
   is_online: boolean
   last_seen: string
