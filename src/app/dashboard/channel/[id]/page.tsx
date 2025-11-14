@@ -22,9 +22,7 @@ interface Message {
   content: string
   created_at: string
   user_id: string
-  profiles: Array<{
-    username: string
-  }>
+  username: string
 }
 
 interface Reaction {
@@ -69,17 +67,45 @@ export default function ChannelMessagesPage() {
 
   useEffect(() => {
     const fetchMessages = async () => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('id, content, created_at, user_id, profiles(username)')
-        .eq('channel_id', channelId)
-        .order('created_at', { ascending: true })
-      if (error) {
-        console.error('Failed to fetch messages:', error.message)
-      } else {
-        setMessages((data as unknown as Message[]) ?? [])
+      try {
+        // Fetch messages
+        const { data: messagesData, error: messagesError } = await supabase
+          .from('messages')
+          .select('id, content, created_at, user_id')
+          .eq('channel_id', channelId)
+          .order('created_at', { ascending: true })
+
+        if (messagesError) {
+          console.error('Failed to fetch messages:', messagesError.message)
+          return
+        }
+
+        // Get unique user IDs
+        const userIds = [...new Set((messagesData ?? []).map(m => m.user_id))]
+
+        // Fetch profiles for those users
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, username')
+          .in('id', userIds)
+
+        // Create a map of user_id to username
+        const usernameMap = new Map(
+          (profilesData ?? []).map(p => [p.id, p.username])
+        )
+
+        // Merge messages with usernames
+        const messagesWithUsernames = (messagesData ?? []).map(msg => ({
+          ...msg,
+          username: usernameMap.get(msg.user_id) || msg.user_id,
+        }))
+
+        setMessages(messagesWithUsernames as Message[])
+      } catch (err) {
+        console.error('Error fetching messages:', err)
       }
     }
+
     fetchMessages()
   }, [channelId])
 
@@ -116,12 +142,30 @@ export default function ChannelMessagesPage() {
           content: messageText,
         }])
       setMessageText('')
-      const { data: newData } = await supabase
+      
+      // Refetch messages
+      const { data: messagesData } = await supabase
         .from('messages')
-        .select('id, content, created_at, user_id, profiles(username)')
+        .select('id, content, created_at, user_id')
         .eq('channel_id', channelId)
         .order('created_at', { ascending: true })
-      setMessages((newData as unknown as Message[]) ?? [])
+
+      const userIds = [...new Set((messagesData ?? []).map(m => m.user_id))]
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, username')
+        .in('id', userIds)
+
+      const usernameMap = new Map(
+        (profilesData ?? []).map(p => [p.id, p.username])
+      )
+
+      const messagesWithUsernames = (messagesData ?? []).map(msg => ({
+        ...msg,
+        username: usernameMap.get(msg.user_id) || msg.user_id,
+      }))
+
+      setMessages(messagesWithUsernames as Message[])
     } catch (err) {
       setSendError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -194,7 +238,7 @@ export default function ChannelMessagesPage() {
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-blue-800">
-                      {msg.profiles?.[0]?.username || msg.user_id}:
+                      {msg.username}:
                     </span>
                     <span className="text-xs text-gray-400">
                       {msg.created_at
