@@ -16,7 +16,6 @@ export default function SettingsPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     username: profile?.username || '',
-    email: profile?.email || '',
     displayName: profile?.display_name || '',
     bio: profile?.bio || '',
     theme: settings.theme,
@@ -48,7 +47,6 @@ export default function SettingsPage() {
     try {
       await updateProfile({
         username: formData.username,
-        email: formData.email,
         display_name: formData.displayName,
         bio: formData.bio,
       })
@@ -90,21 +88,6 @@ export default function SettingsPage() {
                 onChange={handleInputChange}
                 className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Enter your username"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium mb-1">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter your email"
               />
             </div>
 
