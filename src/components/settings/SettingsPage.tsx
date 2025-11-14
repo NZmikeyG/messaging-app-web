@@ -16,14 +16,12 @@ export default function SettingsPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     username: profile?.username || '',
-    displayName: profile?.display_name || '',
-    bio: profile?.bio || '',
     theme: settings.theme,
     notifications: settings.notifications,
   })
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const { name, value, type } = e.currentTarget
     if (type === 'checkbox') {
@@ -47,8 +45,6 @@ export default function SettingsPage() {
     try {
       await updateProfile({
         username: formData.username,
-        display_name: formData.displayName,
-        bio: formData.bio,
       })
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
@@ -88,36 +84,6 @@ export default function SettingsPage() {
                 onChange={handleInputChange}
                 className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Enter your username"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="displayName" className="block text-sm font-medium mb-1">
-                Display Name
-              </label>
-              <input
-                id="displayName"
-                type="text"
-                name="displayName"
-                value={formData.displayName}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter your display name"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="bio" className="block text-sm font-medium mb-1">
-                Bio
-              </label>
-              <textarea
-                id="bio"
-                name="bio"
-                value={formData.bio}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter your bio"
-                rows={4}
               />
             </div>
 
