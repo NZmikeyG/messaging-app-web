@@ -22,9 +22,9 @@ interface Message {
   content: string
   created_at: string
   user_id: string
-  profiles: {
+  profiles: Array<{
     username: string
-  }
+  }>
 }
 
 interface Reaction {
@@ -77,7 +77,7 @@ export default function ChannelMessagesPage() {
       if (error) {
         console.error('Failed to fetch messages:', error.message)
       } else {
-        setMessages((data as Message[]) ?? [])
+        setMessages((data as unknown as Message[]) ?? [])
       }
     }
     fetchMessages()
@@ -90,7 +90,7 @@ export default function ChannelMessagesPage() {
         .from('message_reactions')
         .select('*')
         .in('message_id', messages.map(m => m.id))
-      setReactions((data as Reaction[]) ?? [])
+      setReactions((data as unknown as Reaction[]) ?? [])
     }
     fetchReactions()
   }, [messages])
@@ -121,7 +121,7 @@ export default function ChannelMessagesPage() {
         .select('id, content, created_at, user_id, profiles(username)')
         .eq('channel_id', channelId)
         .order('created_at', { ascending: true })
-      setMessages((newData as Message[]) ?? [])
+      setMessages((newData as unknown as Message[]) ?? [])
     } catch (err) {
       setSendError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -155,7 +155,7 @@ export default function ChannelMessagesPage() {
       .from('message_reactions')
       .select('*')
       .in('message_id', messages.map(m => m.id))
-    setReactions((data as Reaction[]) ?? [])
+    setReactions((data as unknown as Reaction[]) ?? [])
   }
 
   return (
@@ -194,7 +194,7 @@ export default function ChannelMessagesPage() {
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-blue-800">
-                      {msg.profiles?.username || msg.user_id}:
+                      {msg.profiles?.[0]?.username || msg.user_id}:
                     </span>
                     <span className="text-xs text-gray-400">
                       {msg.created_at
