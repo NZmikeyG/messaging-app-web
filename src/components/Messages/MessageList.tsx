@@ -23,6 +23,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   onRemoveReaction,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -52,8 +53,17 @@ export const MessageList: React.FC<MessageListProps> = ({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-white">
-      <div className="divide-y divide-gray-200">
+    <div 
+      ref={scrollContainerRef}
+      style={{ 
+        flex: 1, 
+        overflowY: 'auto', 
+        overflowX: 'hidden',
+        backgroundColor: 'white',
+        position: 'relative'
+      }}
+    >
+      <div style={{ position: 'relative' }}>
         {messages.map((message: Message) => (
           <MessageItem
             key={message.id}

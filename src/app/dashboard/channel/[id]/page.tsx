@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useUserStore } from '@/store/useUserStore'
 
-const INITIAL_FAVORITE_EMOJIS = ['👍', '😄', '🔥', '💯', '🙏', '🏀']
+const DEFAULT_EMOJIS = ['👍', '😄', '🔥', '💯', '🙏', '🏀']
 const ALL_EMOJIS = [
   '👍', '😄', '🔥', '💯', '🙏', '🏀',
   '🎉', '🤔', '😭', '😂', '🥳', '👀', '👏', '🤩', '🎯', '🏆',
@@ -43,8 +43,15 @@ export default function ChannelMessagesPage() {
   const [messageText, setMessageText] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
+  const [showRecentEmojis, setShowRecentEmojis] = useState(false)
   const [showAllEmojis, setShowAllEmojis] = useState(false)
-  const [recentEmojis, setRecentEmojis] = useState(INITIAL_FAVORITE_EMOJIS)
+  const [recentEmojis, setRecentEmojis] = useState<string[]>(DEFAULT_EMOJIS)
+  const [emojiPickerPos, setEmojiPickerPos] = useState<{ x: number; y: number } | null>(null)
+  const [activeMessageId, setActiveMessageId] = useState<string | null>(null)
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
+  const [showMessageMenu, setShowMessageMenu] = useState<string | null>(null)
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
+  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const userProfile = useUserStore(state => state.profile)
   const bottomScrollRef = useRef<HTMLDivElement>(null)
@@ -79,7 +86,6 @@ export default function ChannelMessagesPage() {
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
         )
 
-        // Fetch messages
         const { data: messagesData, error: messagesError } = await supabase
           .from('messages')
           .select('id, content, created_at, user_id')
@@ -91,21 +97,17 @@ export default function ChannelMessagesPage() {
           return
         }
 
-        // Get unique user IDs
         const userIds = [...new Set((messagesData ?? []).map(m => m.user_id))]
 
-        // Fetch profiles for those users
         const { data: profilesData } = await supabase
           .from('profiles')
           .select('id, username')
           .in('id', userIds)
 
-        // Create a map of user_id to username
         const usernameMap = new Map(
           (profilesData ?? []).map(p => [p.id, p.username])
         )
 
-        // Merge messages with usernames
         const messagesWithUsernames = (messagesData ?? []).map(msg => ({
           ...msg,
           username: usernameMap.get(msg.user_id) || msg.user_id,
@@ -133,19 +135,91 @@ export default function ChannelMessagesPage() {
           .from('message_reactions')
           .select('*')
           .in('message_id', messages.map(m => m.id))
-        setReactions((data as unknown as Reaction[]) ?? [])
+          .order('created_at', { ascending: false })
+        
+        const reactionsData = (data as unknown as Reaction[]) ?? []
+        setReactions(reactionsData)
+
+        if (userProfile?.id) {
+          const userReactions = reactionsData.filter(r => r.user_id === userProfile.id)
+          if (userReactions.length > 0) {
+            const uniqueEmojis: string[] = []
+            const seen = new Set<string>()
+            
+            for (const reaction of userReactions) {
+              if (!seen.has(reaction.emoji)) {
+                uniqueEmojis.push(reaction.emoji)
+                seen.add(reaction.emoji)
+              }
+            }
+            
+            const recentList = uniqueEmojis.slice(0, 6)
+            if (recentList.length < 6) {
+              const remaining = DEFAULT_EMOJIS.filter(e => !seen.has(e))
+              recentList.push(...remaining.slice(0, 6 - recentList.length))
+            }
+            
+            setRecentEmojis(recentList)
+          }
+        }
       } catch (err) {
         console.error('Error fetching reactions:', err)
       }
     }
     fetchReactions()
-  }, [messages])
+  }, [messages, userProfile?.id])
 
   useEffect(() => {
     if (bottomScrollRef.current) {
       bottomScrollRef.current.scrollIntoView({ behavior: 'smooth' })
     }
   }, [messages])
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      
+      if (target.closest('[data-emoji-picker]')) {
+        return
+      }
+      
+      if (target.closest('button[title="Add reaction"]') || target.closest('button[title="Message options"]')) {
+        return
+      }
+      
+      if (activeMessageId) {
+        setActiveMessageId(null)
+        setEmojiPickerPos(null)
+        setShowRecentEmojis(false)
+        setShowAllEmojis(false)
+      }
+    }
+    
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [activeMessageId])
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      
+      if (target.closest('[data-message-menu]')) {
+        return
+      }
+      
+      if (target.closest('button[title="Message options"]')) {
+        return
+      }
+      
+      if (showMessageMenu) {
+        setShowMessageMenu(null)
+        setMenuPos(null)
+      }
+    }
+    
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showMessageMenu])
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
@@ -169,7 +243,6 @@ export default function ChannelMessagesPage() {
         }])
       setMessageText('')
 
-      // Refetch messages
       const { data: messagesData } = await supabase
         .from('messages')
         .select('id, content, created_at, user_id')
@@ -224,10 +297,10 @@ export default function ChannelMessagesPage() {
           emoji,
         }])
       }
-      setRecentEmojis(prev => {
-        const newList = [emoji, ...prev.filter(e => e !== emoji)]
-        return newList.slice(0, 6)
-      })
+
+      const newRecentEmojis = [emoji, ...recentEmojis.filter(e => e !== emoji)].slice(0, 6)
+      setRecentEmojis(newRecentEmojis)
+
       const { data } = await supabase
         .from('message_reactions')
         .select('*')
@@ -238,15 +311,99 @@ export default function ChannelMessagesPage() {
     }
   }
 
+  const handleDeleteMessage = async (messageId: string) => {
+    try {
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+      
+      await supabase
+        .from('messages')
+        .delete()
+        .eq('id', messageId)
+      
+      setMessages(messages.filter(m => m.id !== messageId))
+      setShowMessageMenu(null)
+    } catch (err) {
+      console.error('Error deleting message:', err)
+    }
+  }
+
+  const handleMessageMouseEnter = (messageId: string) => {
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current)
+    }
+    setHoveredMessageId(messageId)
+  }
+
+  const handleMessageMouseLeave = () => {
+    hideTimeoutRef.current = setTimeout(() => {
+      setHoveredMessageId(null)
+    }, 100)
+  }
+
+  const handleButtonMouseEnter = (messageId: string) => {
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current)
+    }
+    setHoveredMessageId(messageId)
+  }
+
+  const handleMenuClick = (e: React.MouseEvent<HTMLButtonElement>, messageId: string) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    setShowMessageMenu(messageId)
+    setMenuPos({ x: rect.left - 150, y: rect.top - 120 })
+  }
+
+  const handleSmileyClick = (e: React.MouseEvent<HTMLButtonElement>, messageId: string) => {
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current)
+    }
+    
+    const rect = e.currentTarget.getBoundingClientRect()
+    let xPos = rect.left - 280
+    const screenWidth = window.innerWidth
+    const emojiBarWidth = 280
+    
+    if (xPos < 10) {
+      xPos = rect.right + 8
+    }
+    
+    setEmojiPickerPos({ x: xPos, y: rect.top })
+    setActiveMessageId(messageId)
+    setShowRecentEmojis(true)
+    setShowAllEmojis(false)
+    setHoveredMessageId(messageId)
+  }
+
+  const handleEmojiPickerMouseLeave = () => {
+    hideTimeoutRef.current = setTimeout(() => {
+      setActiveMessageId(null)
+      setEmojiPickerPos(null)
+      setShowRecentEmojis(false)
+      setShowAllEmojis(false)
+      setHoveredMessageId(null)
+    }, 300)
+  }
+
+  const handleEmojiPickerMouseEnter = () => {
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current)
+    }
+  }
+
+  const isOwnMessage = (messageUserId: string) => userProfile?.id === messageUserId
+
   return (
     <div className="flex flex-col min-h-screen bg-black">
       <div className="py-4 px-6 bg-black text-lg font-bold text-white border-b border-gray-700">
         Channel: {channelInfo?.name ? channelInfo.name : channelId}
       </div>
-      <div className="flex-1 px-2 py-4 overflow-y-auto" style={{ minHeight: 0 }}>
-        <ul className="space-y-2">
+      <div className="flex-1 px-4 py-4 overflow-y-auto" style={{ minHeight: 0 }}>
+        <div className="space-y-3 flex flex-col">
           {messages.map(msg => {
-            // Group reactions by emoji for this message
             const reactionsByEmoji = reactions
               .filter(r => r.message_id === msg.id)
               .reduce((acc, r) => {
@@ -257,108 +414,242 @@ export default function ChannelMessagesPage() {
                 return acc
               }, {} as Record<string, Reaction[]>)
 
+            const isOwn = isOwnMessage(msg.user_id)
+
             return (
-              <li
+              <div
                 key={msg.id}
-                className="bg-white px-4 py-2 rounded-lg shadow border border-gray-200 flex flex-col relative hover:shadow-md transition-shadow"
-                onMouseEnter={(e) => {
-                  const emojiBar = e.currentTarget.querySelector('.emoji-picker')
-                  if (emojiBar) (emojiBar as HTMLElement).style.display = 'flex'
-                }}
-                onMouseLeave={(e) => {
-                  const emojiBar = e.currentTarget.querySelector('.emoji-picker')
-                  if (emojiBar) (emojiBar as HTMLElement).style.display = 'none'
-                }}
+                className={`flex ${isOwn ? 'justify-end' : 'justify-start'} items-end gap-2`}
+                onMouseEnter={() => handleMessageMouseEnter(msg.id)}
+                onMouseLeave={handleMessageMouseLeave}
               >
-                {/* Header row with username, time */}
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-blue-800">
-                      {msg.username}:
-                    </span>
-                    <span className="text-xs text-gray-400">
-                      {msg.created_at
-                        ? new Date(msg.created_at).toLocaleTimeString()
-                        : ''}
-                    </span>
-                  </div>
-                  {/* Emoji Picker Bar - Hidden by default, shown on hover */}
-                  <div 
-                    className="emoji-picker flex gap-1 shrink-0"
-                    style={{ display: 'none' }}
-                  >
-                    {(showAllEmojis ? ALL_EMOJIS : recentEmojis).map(emoji => {
-                      const reactedByMe = reactions.some(r =>
-                        r.message_id === msg.id && r.user_id === userProfile?.id && r.emoji === emoji
-                      )
-                      return (
-                        <button
-                          key={emoji}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleToggleReaction(msg.id, emoji)
-                          }}
-                          className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-sm transition-all
-                            ${reactedByMe 
-                              ? 'bg-blue-100 border border-blue-500 font-bold' 
-                              : 'bg-gray-100 hover:bg-gray-200'
-                            }`}
-                          type="button"
-                          title={reactedByMe ? 'Remove reaction' : 'Add reaction'}
-                        >
-                          <span>{emoji}</span>
-                        </button>
-                      )
-                    })}
-                    {/* More button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setShowAllEmojis(v => !v)
-                      }}
-                      className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-sm bg-gray-300 hover:bg-gray-400 transition-all font-bold"
-                      type="button"
-                      title={showAllEmojis ? 'Show less emojis' : 'Show all emojis'}
-                    >
-                      {showAllEmojis ? '←' : '⋯'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Message content */}
-                <div className="text-gray-900">{msg.content}</div>
-
-                {/* Persistent Reactions Display (Facebook Messenger style) */}
-                {Object.keys(reactionsByEmoji).length > 0 && (
-                  <div className="flex gap-2 flex-wrap mt-2">
-                    {Object.entries(reactionsByEmoji).map(([emoji, reactors]) => (
-                      <button
-                        key={emoji}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleToggleReaction(msg.id, emoji)
-                        }}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-sm border transition-all
-                          ${reactors.some(r => r.user_id === userProfile?.id)
-                            ? 'bg-blue-100 border-blue-400 font-semibold'
-                            : 'bg-gray-100 border-gray-300'
-                          }`}
-                        type="button"
-                        title={`${reactors.map(r => r.user_id === userProfile?.id ? 'You' : r.user_id).join(', ')}`}
-                      >
-                        <span className="text-base">{emoji}</span>
-                        <span className="text-xs font-semibold">{reactors.length}</span>
-                      </button>
-                    ))}
+                {!isOwn && (
+                  <div className="flex flex-col items-center">
+                    <div className="text-xs text-gray-400 mb-1">{msg.username}</div>
                   </div>
                 )}
-              </li>
+
+                <div className={`flex items-end gap-2 max-w-md`}>
+                  {hoveredMessageId === msg.id && !isOwn && (
+                    <div className="flex flex-col gap-1">
+                      {isOwn && (
+                        <button
+                          onClick={(e) => handleMenuClick(e, msg.id)}
+                          className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded transition cursor-pointer text-sm"
+                          type="button"
+                          title="Message options"
+                        >
+                          ⋯
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => handleSmileyClick(e, msg.id)}
+                        onMouseEnter={() => handleButtonMouseEnter(msg.id)}
+                        className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded transition cursor-pointer text-sm"
+                        type="button"
+                        title="Add reaction"
+                      >
+                        🙂
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-1">
+                    <div
+                      className={`px-4 py-2 rounded-2xl break-words ${
+                        isOwn
+                          ? 'bg-blue-600 text-white rounded-br-none'
+                          : 'bg-gray-300 text-black rounded-bl-none'
+                      }`}
+                    >
+                      <p className="text-sm">{msg.content}</p>
+                      <p className={`text-xs mt-1 ${isOwn ? 'text-blue-100' : 'text-gray-600'}`}>
+                        {msg.created_at
+                          ? new Date(msg.created_at).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : ''}
+                      </p>
+                    </div>
+
+                    {Object.keys(reactionsByEmoji).length > 0 && (
+                      <div className="flex gap-1 flex-wrap px-2">
+                        {Object.entries(reactionsByEmoji).map(([emoji, reactors]) => (
+                          <button
+                            key={emoji}
+                            onClick={() => handleToggleReaction(msg.id, emoji)}
+                            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-all ${
+                              reactors.some(r => r.user_id === userProfile?.id)
+                                ? 'bg-blue-200 border-blue-400'
+                                : 'bg-gray-200 border-gray-300 hover:bg-gray-300'
+                            }`}
+                          >
+                            <span>{emoji}</span>
+                            <span className="text-xs">{reactors.length > 1 ? reactors.length : ''}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {hoveredMessageId === msg.id && isOwn && (
+                    <div className="flex flex-col gap-1">
+                      <button
+                        onClick={(e) => handleMenuClick(e, msg.id)}
+                        className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded transition cursor-pointer text-sm"
+                        type="button"
+                        title="Message options"
+                      >
+                        ⋯
+                      </button>
+                      <button
+                        onClick={(e) => handleSmileyClick(e, msg.id)}
+                        onMouseEnter={() => handleButtonMouseEnter(msg.id)}
+                        className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded transition cursor-pointer text-sm"
+                        type="button"
+                        title="Add reaction"
+                      >
+                        🙂
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {isOwn && (
+                  <div className="w-8" />
+                )}
+              </div>
             )
           })}
           <div ref={bottomScrollRef} />
-        </ul>
+        </div>
       </div>
-      <form onSubmit={handleSend} className="flex items-center gap-2 p-4 bg-black">
+
+      {/* Message Menu (Edit, Delete, Forward) */}
+      {showMessageMenu && menuPos && (
+        <div 
+          data-message-menu="true"
+          style={{
+            position: 'fixed',
+            top: `${menuPos.y}px`,
+            left: `${menuPos.x}px`,
+            zIndex: 9998,
+            backgroundColor: 'white',
+            border: '1px solid #d1d5db',
+            borderRadius: '8px',
+            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+            minWidth: '150px',
+          }}
+          onMouseLeave={() => setShowMessageMenu(null)}
+        >
+          <button
+            onClick={() => {
+              console.log('Edit message:', showMessageMenu)
+              setShowMessageMenu(null)
+            }}
+            className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-900 border-b border-gray-200 transition"
+          >
+            ✏️ Edit
+          </button>
+          <button
+            onClick={() => handleDeleteMessage(showMessageMenu)}
+            className="w-full text-left px-4 py-2 hover:bg-red-100 text-sm text-red-600 border-b border-gray-200 transition"
+          >
+            🗑️ Delete
+          </button>
+          <button
+            onClick={() => {
+              console.log('Forward message:', showMessageMenu)
+              setShowMessageMenu(null)
+            }}
+            className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-900 transition"
+          >
+            ↗️ Forward
+          </button>
+        </div>
+      )}
+
+      {/* Recent Emojis Picker */}
+      {activeMessageId && emojiPickerPos && showRecentEmojis && !showAllEmojis && (
+        <div 
+          data-emoji-picker="true"
+          style={{
+            position: 'fixed',
+            top: `${emojiPickerPos.y}px`,
+            left: `${emojiPickerPos.x}px`,
+            zIndex: 9999,
+            backgroundColor: 'white',
+            border: '1px solid #d1d5db',
+            borderRadius: '8px',
+            padding: '8px',
+            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+            display: 'flex',
+            gap: '4px',
+            whiteSpace: 'nowrap',
+          }}
+          onMouseEnter={handleEmojiPickerMouseEnter}
+          onMouseLeave={handleEmojiPickerMouseLeave}
+        >
+          {recentEmojis.map(emoji => (
+            <button
+              key={emoji}
+              onClick={() => handleToggleReaction(activeMessageId, emoji)}
+              className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded transition text-lg flex-shrink-0 cursor-pointer"
+              type="button"
+            >
+              {emoji}
+            </button>
+          ))}
+          <button
+            onClick={() => setShowAllEmojis(true)}
+            className="w-8 h-8 flex items-center justify-center hover:bg-gray-200 rounded transition font-bold text-sm flex-shrink-0 cursor-pointer"
+            type="button"
+          >
+            ⋯
+          </button>
+        </div>
+      )}
+
+      {/* Expanded Emoji Grid */}
+      {activeMessageId && emojiPickerPos && showAllEmojis && (
+        <div 
+          data-emoji-picker="true"
+          style={{
+            position: 'fixed',
+            top: `${emojiPickerPos.y + 50}px`,
+            left: `${emojiPickerPos.x}px`,
+            zIndex: 9999,
+            backgroundColor: 'white',
+            border: '1px solid #d1d5db',
+            borderRadius: '8px',
+            padding: '8px',
+            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(6, 1fr)',
+            gap: '4px',
+            width: '280px',
+          }}
+          onMouseEnter={handleEmojiPickerMouseEnter}
+          onMouseLeave={handleEmojiPickerMouseLeave}
+        >
+          {ALL_EMOJIS.map(emoji => (
+            <button
+              key={emoji}
+              onClick={() => {
+                handleToggleReaction(activeMessageId, emoji)
+                setShowAllEmojis(false)
+              }}
+              className="w-10 h-10 flex items-center justify-center hover:bg-gray-100 rounded transition text-lg cursor-pointer"
+              type="button"
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={handleSend} className="flex items-center gap-2 p-4 bg-black border-t border-gray-700">
         <input
           type="text"
           value={messageText}
@@ -377,7 +668,7 @@ export default function ChannelMessagesPage() {
         </button>
       </form>
       {sendError && (
-        <div className="mt-2 text-red-600 font-semibold">{sendError}</div>
+        <div className="p-4 text-red-600 font-semibold bg-red-950 border-t border-red-800">{sendError}</div>
       )}
     </div>
   )
