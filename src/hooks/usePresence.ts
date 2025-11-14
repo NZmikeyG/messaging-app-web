@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
-import { useUserStore } from '@/store/useUserStore'
-import type { UserPresence } from '@/store/useUserStore'
+import { useUserStore, type UserPresence } from '@/store/useUserStore'
 import React from 'react'
 
 const supabase = createClient(
@@ -101,7 +100,7 @@ export const useUserPresenceList = () => {
 
       if (fetchError) throw fetchError
 
-      setPresenceList(data as UserPresence[])
+      setPresenceList((data as unknown as UserPresence[]) ?? [])
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch presence list'
       setError(message)
@@ -127,15 +126,15 @@ export const useUserPresenceList = () => {
         (payload) => {
           if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
             setPresenceList((prev) => {
-              const index = prev.findIndex((p) => p.user_id === payload.new.user_id)
+              const index = prev.findIndex((p) => p.user_id === (payload.new as UserPresence).user_id)
               if (index > -1) {
                 return [
                   ...prev.slice(0, index),
-                  payload.new,
+                  payload.new as UserPresence,
                   ...prev.slice(index + 1),
                 ]
               }
-              return [payload.new, ...prev]
+              return [payload.new as UserPresence, ...prev]
             })
           }
         }
