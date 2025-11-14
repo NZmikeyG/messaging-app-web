@@ -8,6 +8,7 @@ import { useUserStore } from '@/store/useUserStore'
 import { UserProfileCard } from '@/components/profile/UserProfileCard'
 import { EditProfileModal } from '@/components/profile/EditProfileModal'
 import { ChannelList } from '@/components/ChannelList'
+import { supabase } from '@/lib/supabase/client'
 
 function DashboardContent() {
   const router = useRouter()
@@ -26,13 +27,6 @@ function DashboardContent() {
     const initializeProfile = async () => {
       try {
         setIsLoading(true)
-
-        // Dynamic import - only in browser
-        const { createClient } = await import('@supabase/supabase-js')
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
 
         const { data, error: sessionError } = await supabase.auth.getSession()
         if (sessionError) throw sessionError
@@ -53,7 +47,7 @@ function DashboardContent() {
         setIsLoading(false)
       }
     }
-    
+
     setMounted(true)
     initializeProfile()
   }, [fetchProfile, router])

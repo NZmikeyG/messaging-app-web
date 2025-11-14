@@ -1,34 +1,41 @@
 'use client'
 
-import { ReactNode, useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import React, { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase/client'
+import { useUserStore } from '@/store/useUserStore'
 
-export function Providers({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false)
+export function Providers({ children }: { children: React.ReactNode }) {
+  const [isSessionLoading, setIsSessionLoading] = useState(true)
+  const { setError } = useUserStore()
 
   useEffect(() => {
     // Initialize session on app load
     const initSession = async () => {
-      const supabase = createClient()
-      const { data } = await supabase.auth.getSession()
-      
-      // Persist session to localStorage for recovery
-      if (data?.session) {
-        localStorage.setItem('sb-session', JSON.stringify(data.session))
+      try {
+        const { data, error: sessionError } = await supabase.auth.getSession()
+        if (sessionError) throw sessionError
+
+        if (data.session?.user) {
+          localStorage.setItem('session', JSON.stringify(data.session))
+        }
+      } catch (error: any) {
+        const message = error instanceof Error ? error.message : 'Failed to initialize session'
+        setError(message)
+        console.error('Failed to initialize session:', error)
+      } finally {
+        setIsSessionLoading(false)
       }
     }
 
     initSession()
-    setMounted(true)
 
     // Listen for auth changes
-    const supabase = createClient()
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      (event: any, session: any) => {
         if (session) {
-          localStorage.setItem('sb-session', JSON.stringify(session))
+          localStorage.setItem('session', JSON.stringify(session))
         } else {
-          localStorage.removeItem('sb-session')
+          localStorage.removeItem('session')
         }
       }
     )
@@ -36,11 +43,17 @@ export function Providers({ children }: { children: ReactNode }) {
     return () => {
       subscription?.unsubscribe()
     }
-  }, [])
+  }, [setError])
 
-  // Prevent hydration mismatch
-  if (!mounted) {
-    return <>{children}</>
+  if (isSessionLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
   }
 
   return <>{children}</>

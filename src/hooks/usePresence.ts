@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useUserStore, type UserPresence } from '@/store/useUserStore'
+import { supabase } from '@/lib/supabase/client'
 import React from 'react'
 
 export const usePresence = (userId: string | undefined) => {
@@ -15,12 +16,6 @@ export const usePresence = (userId: string | undefined) => {
     // Initial presence update
     const updatePresence = async () => {
       try {
-        const { createClient } = await import('@supabase/supabase-js')
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
-
         const { error } = await supabase
           .from('user_presence')
           .upsert(
@@ -64,12 +59,6 @@ export const usePresence = (userId: string | undefined) => {
 
         const markOffline = async () => {
           try {
-            const { createClient } = await import('@supabase/supabase-js')
-            const supabase = createClient(
-              process.env.NEXT_PUBLIC_SUPABASE_URL!,
-              process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-            )
-
             await supabase
               .from('user_presence')
               .update({
@@ -101,12 +90,6 @@ export const useUserPresenceList = () => {
       setLoading(true)
       setError(null)
 
-      const { createClient } = await import('@supabase/supabase-js')
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
-
       const { data, error: fetchError } = await supabase
         .from('user_presence')
         .select('*')
@@ -132,12 +115,6 @@ export const useUserPresenceList = () => {
 
     ;(async () => {
       try {
-        const { createClient } = await import('@supabase/supabase-js')
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
-
         subscription = supabase
           .channel('user_presence')
           .on(

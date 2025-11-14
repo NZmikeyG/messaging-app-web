@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { supabase } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,14 +18,6 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      // Dynamic import - only in browser, not at build time
-      const { createClient } = await import('@supabase/supabase-js')
-      
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
-
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -32,7 +25,6 @@ export default function LoginPage() {
 
       if (signInError) throw signInError
 
-      // Redirect to dashboard
       router.push('/dashboard')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to login'

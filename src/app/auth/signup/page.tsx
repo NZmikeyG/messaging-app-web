@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
+import { supabase } from '@/lib/supabase/client'
 
 export default function SignupPage() {
   const router = useRouter()
@@ -15,7 +16,6 @@ export default function SignupPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Validation
     if (password !== confirmPassword) {
       toast.error('Passwords do not match')
       return
@@ -34,10 +34,6 @@ export default function SignupPage() {
     setLoading(true)
 
     try {
-      // Import and create client only when needed (client-side only)
-      const { createClient } = await import('@/lib/supabase/client')
-      const supabase = createClient()
-
       const { error } = await supabase.auth.signUp({
         email,
         password,

@@ -1,20 +1,16 @@
-// components/Sidebar/ChannelList.tsx
-
 'use client';
 
 import React from 'react';
 import ChannelItem from './ChannelItem';
-import { Channel } from '@/lib/types';
+import { ChannelHierarchy } from '@/lib/types';
 
 interface ChannelListProps {
-  channels: Channel[];
+  channels: ChannelHierarchy[];
   expandedChannels: Set<string>;
   activeChannelId?: string;
   onChannelSelect: (channelId: string) => void;
   onToggleExpanded: (channelId: string) => void;
   workspaceId: string;
-  depth?: number;
-  parentId?: string | null;
 }
 
 export default function ChannelList({
@@ -24,52 +20,28 @@ export default function ChannelList({
   onChannelSelect,
   onToggleExpanded,
   workspaceId,
-  depth = 0,
-  parentId = null,
 }: ChannelListProps) {
-  // Filter channels to show only those at current depth level
-  const currentLevelChannels = channels.filter(
-    (ch) => ch.parent_id === parentId
-  );
+  // Get only root channels (no parent)
+  const rootChannels = channels.filter((ch) => !ch.parent_id);
+
+  if (rootChannels.length === 0) {
+    return <div className="px-4 py-2 text-sm text-gray-400">No channels</div>;
+  }
 
   return (
-    <>
-      {currentLevelChannels.map((channel) => {
-        // Get sub-channels for this channel
-        const hasSubChannels = channels.some(
-          (ch) => ch.parent_id === channel.id
-        );
-        const isExpanded = expandedChannels.has(channel.id);
-        const isActive = activeChannelId === channel.id;
-
-        return (
-          <div key={channel.id}>
-            <ChannelItem
-              channel={channel}
-              hasSubChannels={hasSubChannels}
-              isExpanded={isExpanded}
-              isActive={isActive}
-              depth={depth}
-              onSelect={() => onChannelSelect(channel.id)}
-              onToggleExpanded={() => onToggleExpanded(channel.id)}
-            />
-
-            {/* Render sub-channels recursively */}
-            {hasSubChannels && isExpanded && (
-              <ChannelList
-                channels={channels}
-                expandedChannels={expandedChannels}
-                activeChannelId={activeChannelId}
-                onChannelSelect={onChannelSelect}
-                onToggleExpanded={onToggleExpanded}
-                workspaceId={workspaceId}
-                depth={depth + 1}
-                parentId={channel.id}
-              />
-            )}
-          </div>
-        );
-      })}
-    </>
+    <div className="space-y-0.5">
+      {rootChannels.map((channel) => (
+        <ChannelItem
+          key={channel.id}
+          channel={channel}
+          channels={channels}
+          expandedChannels={expandedChannels}
+          activeChannelId={activeChannelId}
+          onChannelSelect={onChannelSelect}
+          onToggleExpanded={onToggleExpanded}
+          depth={0}
+        />
+      ))}
+    </div>
   );
 }

@@ -98,3 +98,6 @@ vite.config.ts.timestamp-*
 
 # Testing
 .nyc_output
+
+# Git merge conflicts
+*.orig

@@ -1,5 +1,8 @@
+'use client'
+
 import { useCallback } from 'react'
 import { useUserStore } from '@/store/useUserStore'
+import { supabase } from '@/lib/supabase/client'
 import type { Profile } from '@/types'
 
 export const useUserProfile = () => {
@@ -8,15 +11,9 @@ export const useUserProfile = () => {
   const createDefaultProfile = useCallback(
     async (userId: string) => {
       try {
-        const { createClient } = await import('@supabase/supabase-js')
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
-
         const { data: userAuth } = await supabase.auth.getUser()
         const userEmail = userAuth?.user?.email || 'user'
-        const defaultUsername = `${userEmail.split('@')[0]}_${userId.slice(0, 6)}`
+        const defaultUsername = `${userEmail.split('@')}_${userId.slice(0, 6)}`
 
         const { data, error } = await supabase
           .from('profiles')
@@ -52,12 +49,6 @@ export const useUserProfile = () => {
         setIsLoading(true)
         setError(null)
 
-        const { createClient } = await import('@supabase/supabase-js')
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
-
         const { data, error: fetchError } = await supabase
           .from('profiles')
           .select('*')
@@ -89,12 +80,6 @@ export const useUserProfile = () => {
       try {
         setIsLoading(true)
         setError(null)
-
-        const { createClient } = await import('@supabase/supabase-js')
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
 
         const currentProfile = useUserStore.getState().profile
         if (!currentProfile || !currentProfile.id) {
@@ -138,12 +123,6 @@ export const useUserProfile = () => {
           throw new Error('File must be an image')
         }
 
-        const { createClient } = await import('@supabase/supabase-js')
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
-
         const fileName = `${userId}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`
 
         const { error: uploadError } = await supabase.storage
@@ -174,18 +153,12 @@ export const useUserProfile = () => {
         setIsLoading(true)
         setError(null)
 
-        const { createClient } = await import('@supabase/supabase-js')
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
-
         const urlParts = avatarUrl.split('/storage/v1/object/public/avatars/')
-        if (!urlParts[1]) {
+        if (!urlParts) {
           throw new Error('Invalid avatar URL')
         }
 
-        const filePath = urlParts[1]
+        const filePath = urlParts
 
         const { error: deleteError } = await supabase.storage
           .from('avatars')

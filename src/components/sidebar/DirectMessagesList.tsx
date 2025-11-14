@@ -1,5 +1,3 @@
-// components/Sidebar/DirectMessagesList.tsx
-
 'use client';
 
 import React, { useState } from 'react';
@@ -30,7 +28,7 @@ export default function DirectMessagesList({
           key={dm.id}
           className="px-4 py-2 mx-2 rounded text-sm text-gray-200 hover:bg-gray-800 cursor-pointer transition flex items-center gap-2"
         >
-          <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-xs font-semibold flex-shrink-0">
+          <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-xs font-semibold shrink-0">
             {dm.avatar}
           </div>
           <span className="flex-1 truncate">{dm.name}</span>

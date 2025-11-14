@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import React, { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useUserStore } from '@/store/useUserStore'
+import { supabase } from '@/lib/supabase/client'
 
 const DEFAULT_EMOJIS = ['👍', '😄', '🔥', '💯', '🙏', '🏀']
 const ALL_EMOJIS = [
@@ -59,11 +60,6 @@ export default function ChannelMessagesPage() {
   useEffect(() => {
     async function fetchChannel() {
       try {
-        const { createClient } = await import('@supabase/supabase-js')
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
         const { data } = await supabase
           .from('channels')
           .select('name')
@@ -80,12 +76,6 @@ export default function ChannelMessagesPage() {
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        const { createClient } = await import('@supabase/supabase-js')
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
-
         const { data: messagesData, error: messagesError } = await supabase
           .from('messages')
           .select('id, content, created_at, user_id')
@@ -97,7 +87,7 @@ export default function ChannelMessagesPage() {
           return
         }
 
-        const userIds = [...new Set((messagesData ?? []).map(m => m.user_id))]
+        const userIds = [...new Set((messagesData ?? []).map((m: any) => m.user_id))]
 
         const { data: profilesData } = await supabase
           .from('profiles')
@@ -105,10 +95,10 @@ export default function ChannelMessagesPage() {
           .in('id', userIds)
 
         const usernameMap = new Map(
-          (profilesData ?? []).map(p => [p.id, p.username])
+          (profilesData ?? []).map((p: any) => [p.id, p.username])
         )
 
-        const messagesWithUsernames = (messagesData ?? []).map(msg => ({
+        const messagesWithUsernames = (messagesData ?? []).map((msg: any) => ({
           ...msg,
           username: usernameMap.get(msg.user_id) || msg.user_id,
         }))
@@ -126,15 +116,10 @@ export default function ChannelMessagesPage() {
     const fetchReactions = async () => {
       if (messages.length === 0) return
       try {
-        const { createClient } = await import('@supabase/supabase-js')
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
         const { data } = await supabase
           .from('message_reactions')
           .select('*')
-          .in('message_id', messages.map(m => m.id))
+          .in('message_id', messages.map((m: any) => m.id))
           .order('created_at', { ascending: false })
         
         const reactionsData = (data as unknown as Reaction[]) ?? []
@@ -226,12 +211,6 @@ export default function ChannelMessagesPage() {
     setSendError(null)
     setSending(true)
     try {
-      const { createClient } = await import('@supabase/supabase-js')
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
-
       if (!messageText.trim()) throw new Error('Message cannot be empty')
       if (!userProfile?.id) throw new Error('User profile not loaded')
       await supabase
@@ -249,17 +228,17 @@ export default function ChannelMessagesPage() {
         .eq('channel_id', channelId)
         .order('created_at', { ascending: true })
 
-      const userIds = [...new Set((messagesData ?? []).map(m => m.user_id))]
+      const userIds = [...new Set((messagesData ?? []).map((m: any) => m.user_id))]
       const { data: profilesData } = await supabase
         .from('profiles')
         .select('id, username')
         .in('id', userIds)
 
       const usernameMap = new Map(
-        (profilesData ?? []).map(p => [p.id, p.username])
+        (profilesData ?? []).map((p: any) => [p.id, p.username])
       )
 
-      const messagesWithUsernames = (messagesData ?? []).map(msg => ({
+      const messagesWithUsernames = (messagesData ?? []).map((msg: any) => ({
         ...msg,
         username: usernameMap.get(msg.user_id) || msg.user_id,
       }))
@@ -275,12 +254,6 @@ export default function ChannelMessagesPage() {
   const handleToggleReaction = async (messageId: string, emoji: string) => {
     if (!userProfile?.id) return
     try {
-      const { createClient } = await import('@supabase/supabase-js')
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
-
       const existing = reactions.find(
         r => r.message_id === messageId && r.user_id === userProfile.id
       )
@@ -304,7 +277,7 @@ export default function ChannelMessagesPage() {
       const { data } = await supabase
         .from('message_reactions')
         .select('*')
-        .in('message_id', messages.map(m => m.id))
+        .in('message_id', messages.map((m: any) => m.id))
       setReactions((data as unknown as Reaction[]) ?? [])
     } catch (err) {
       console.error('Error toggling reaction:', err)
@@ -313,18 +286,12 @@ export default function ChannelMessagesPage() {
 
   const handleDeleteMessage = async (messageId: string) => {
     try {
-      const { createClient } = await import('@supabase/supabase-js')
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
-      
       await supabase
         .from('messages')
         .delete()
         .eq('id', messageId)
       
-      setMessages(messages.filter(m => m.id !== messageId))
+      setMessages(messages.filter((m: any) => m.id !== messageId))
       setShowMessageMenu(null)
     } catch (err) {
       console.error('Error deleting message:', err)
@@ -364,8 +331,6 @@ export default function ChannelMessagesPage() {
     
     const rect = e.currentTarget.getBoundingClientRect()
     let xPos = rect.left - 280
-    const screenWidth = window.innerWidth
-    const emojiBarWidth = 280
     
     if (xPos < 10) {
       xPos = rect.right + 8
@@ -403,7 +368,7 @@ export default function ChannelMessagesPage() {
       </div>
       <div className="flex-1 px-4 py-4 overflow-y-auto" style={{ minHeight: 0 }}>
         <div className="space-y-3 flex flex-col">
-          {messages.map(msg => {
+          {messages.map((msg: any) => {
             const reactionsByEmoji = reactions
               .filter(r => r.message_id === msg.id)
               .reduce((acc, r) => {
@@ -456,7 +421,7 @@ export default function ChannelMessagesPage() {
 
                   <div className="flex flex-col gap-1">
                     <div
-                      className={`px-4 py-2 rounded-2xl break-words ${
+                      className={`px-4 py-2 rounded-2xl wrap-break-word ${
                         isOwn
                           ? 'bg-blue-600 text-white rounded-br-none'
                           : 'bg-gray-300 text-black rounded-bl-none'
@@ -484,6 +449,7 @@ export default function ChannelMessagesPage() {
                                 ? 'bg-blue-200 border-blue-400'
                                 : 'bg-gray-200 border-gray-300 hover:bg-gray-300'
                             }`}
+                            type="button"
                           >
                             <span>{emoji}</span>
                             <span className="text-xs">{reactors.length > 1 ? reactors.length : ''}</span>
@@ -526,7 +492,6 @@ export default function ChannelMessagesPage() {
         </div>
       </div>
 
-      {/* Message Menu (Edit, Delete, Forward) */}
       {showMessageMenu && menuPos && (
         <div 
           data-message-menu="true"
@@ -549,12 +514,14 @@ export default function ChannelMessagesPage() {
               setShowMessageMenu(null)
             }}
             className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-900 border-b border-gray-200 transition"
+            type="button"
           >
             ✏️ Edit
           </button>
           <button
             onClick={() => handleDeleteMessage(showMessageMenu)}
             className="w-full text-left px-4 py-2 hover:bg-red-100 text-sm text-red-600 border-b border-gray-200 transition"
+            type="button"
           >
             🗑️ Delete
           </button>
@@ -564,13 +531,13 @@ export default function ChannelMessagesPage() {
               setShowMessageMenu(null)
             }}
             className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-900 transition"
+            type="button"
           >
             ↗️ Forward
           </button>
         </div>
       )}
 
-      {/* Recent Emojis Picker */}
       {activeMessageId && emojiPickerPos && showRecentEmojis && !showAllEmojis && (
         <div 
           data-emoji-picker="true"
@@ -595,7 +562,7 @@ export default function ChannelMessagesPage() {
             <button
               key={emoji}
               onClick={() => handleToggleReaction(activeMessageId, emoji)}
-              className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded transition text-lg flex-shrink-0 cursor-pointer"
+              className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded transition text-lg shrink-0 cursor-pointer"
               type="button"
             >
               {emoji}
@@ -603,7 +570,7 @@ export default function ChannelMessagesPage() {
           ))}
           <button
             onClick={() => setShowAllEmojis(true)}
-            className="w-8 h-8 flex items-center justify-center hover:bg-gray-200 rounded transition font-bold text-sm flex-shrink-0 cursor-pointer"
+            className="w-8 h-8 flex items-center justify-center hover:bg-gray-200 rounded transition font-bold text-sm shrink-0 cursor-pointer"
             type="button"
           >
             ⋯
@@ -611,7 +578,6 @@ export default function ChannelMessagesPage() {
         </div>
       )}
 
-      {/* Expanded Emoji Grid */}
       {activeMessageId && emojiPickerPos && showAllEmojis && (
         <div 
           data-emoji-picker="true"
