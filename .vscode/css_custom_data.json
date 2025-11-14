@@ -1,0 +1,25 @@
+{
+  "version": 1.1,
+  "atRules": [
+    {
+      "name": "@theme",
+      "description": "Tailwind CSS v4 theme definition with inline syntax support"
+    },
+    {
+      "name": "@import",
+      "description": "Import Tailwind CSS or other stylesheets"
+    },
+    {
+      "name": "@layer",
+      "description": "Define Tailwind CSS layers (base, components, utilities)"
+    },
+    {
+      "name": "@media",
+      "description": "Media query for responsive design"
+    },
+    {
+      "name": "@supports",
+      "description": "Feature query for CSS feature detection"
+    }
+  ]
+}
