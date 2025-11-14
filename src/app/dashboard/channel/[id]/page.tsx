@@ -62,7 +62,7 @@ export default function ChannelMessagesPage() {
         .select('name')
         .eq('id', channelId)
         .single()
-      if (data) setChannelInfo(data)
+      if (data) setChannelInfo(data as ChannelInfo)
     }
     fetchChannel()
   }, [channelId])
@@ -77,7 +77,7 @@ export default function ChannelMessagesPage() {
       if (error) {
         console.error('Failed to fetch messages:', error.message)
       } else {
-        setMessages(data ?? [])
+        setMessages((data as Message[]) ?? [])
       }
     }
     fetchMessages()
@@ -90,7 +90,7 @@ export default function ChannelMessagesPage() {
         .from('message_reactions')
         .select('*')
         .in('message_id', messages.map(m => m.id))
-      setReactions(data ?? [])
+      setReactions((data as Reaction[]) ?? [])
     }
     fetchReactions()
   }, [messages])
@@ -121,7 +121,7 @@ export default function ChannelMessagesPage() {
         .select('id, content, created_at, user_id, profiles(username)')
         .eq('channel_id', channelId)
         .order('created_at', { ascending: true })
-      setMessages(newData ?? [])
+      setMessages((newData as Message[]) ?? [])
     } catch (err) {
       setSendError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -155,7 +155,7 @@ export default function ChannelMessagesPage() {
       .from('message_reactions')
       .select('*')
       .in('message_id', messages.map(m => m.id))
-    setReactions(data ?? [])
+    setReactions((data as Reaction[]) ?? [])
   }
 
   return (
