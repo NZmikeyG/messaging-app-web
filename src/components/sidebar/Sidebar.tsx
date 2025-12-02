@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import ChannelList from './ChannelList';
 import DirectMessagesList from './DirectMessagesList';
 import { Channel } from '@/lib/types';
@@ -29,13 +29,12 @@ export default function Sidebar({
   );
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'channels' | 'dms' | 'settings'>('channels');
+  const [activeTab, setActiveTab] = useState<'channels' | 'dms' | 'settings'>(
+    'channels'
+  );
 
-  useEffect(() => {
-    loadChannels();
-  }, [workspaceId]);
-
-  async function loadChannels() {
+  // Wrap loadChannels in useCallback to avoid dependency issues
+  const loadChannels = useCallback(async () => {
     try {
       setLoading(true);
       const hierarchy = await getChannelHierarchy(workspaceId);
@@ -45,7 +44,11 @@ export default function Sidebar({
     } finally {
       setLoading(false);
     }
-  }
+  }, [workspaceId]);
+
+  useEffect(() => {
+    loadChannels();
+  }, [loadChannels]);
 
   const toggleChannelExpanded = (channelId: string) => {
     const newExpanded = new Set(expandedChannels);
@@ -62,11 +65,9 @@ export default function Sidebar({
     ch.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const rootChannels = filteredChannels.filter((ch) => !ch.parent_id);
-
   return (
     <div className="w-64 bg-gray-900 text-white h-screen flex flex-col border-r border-gray-700">
-      {/* Header - FIXED: No nested buttons */}
+      {/* Header */}
       <div className="p-4 border-b border-gray-700 flex items-center justify-between gap-2">
         <button
           onClick={() => router.push('/dashboard')}
@@ -75,7 +76,7 @@ export default function Sidebar({
         >
           <h1 className="text-lg font-bold truncate">My Workspace</h1>
         </button>
-        <button 
+        <button
           className="p-1 rounded hover:bg-gray-800 transition flex-shrink-0"
           title="Settings"
           onClick={() => setActiveTab('settings')}
