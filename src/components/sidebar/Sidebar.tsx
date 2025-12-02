@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import ChannelList from './ChannelList';
-import DirectMessagesList from './DirectMessagesList';
+import DirectMessagesList from '@/components/DirectMessages/DirectMessagesList';
 import { Channel } from '@/lib/types';
 import { getChannelHierarchy } from '@/lib/supabase/channels';
 import { useRouter } from 'next/navigation';
@@ -119,7 +120,7 @@ export default function Sidebar({
         </button>
       </div>
 
-      {/* Search */}
+      {/* Search - Only for Channels */}
       {activeTab === 'channels' && (
         <div className="p-3 border-b border-gray-700">
           <input
@@ -169,14 +170,33 @@ export default function Sidebar({
           </div>
         )}
 
-        {/* DMS TAB */}
+        {/* DMS TAB - UPDATED for Phase 2 */}
         {activeTab === 'dms' && (
-          <div className="py-3">
-            <div className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Direct Messages
+          <div className="py-3 space-y-2">
+            {/* All Messages Link */}
+            <Link
+              href="/dashboard/dm"
+              className="flex items-center justify-between mx-3 px-3 py-2 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-800 rounded transition"
+            >
+              <span>All Messages</span>
+              <span className="text-xs">→</span>
+            </Link>
+
+            {/* Divider */}
+            <div className="px-4">
+              <div className="border-t border-gray-700"></div>
             </div>
+
+            {/* Section Header */}
+            <div className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              Recent
+            </div>
+
+            {/* DirectMessagesList Component */}
             <DirectMessagesList onNewMessage={onNewMessage} />
-            <div className="mt-2 px-4">
+
+            {/* New Message Button */}
+            <div className="px-4 py-2">
               <button
                 onClick={onNewMessage}
                 className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded transition"
