@@ -61,6 +61,24 @@ export default function Sidebar({
     setExpandedChannels(newExpanded);
   };
 
+  // Handle New Message button - navigate to DM list
+  const handleNewMessage = () => {
+    router.push('/dashboard/dm');
+  };
+
+  // Handle Sign Out
+  const handleSignOut = async () => {
+    try {
+      const response = await fetch('/auth/signout', { method: 'POST' });
+      if (response.ok) {
+        router.push('/auth/login');
+      }
+    } catch (error) {
+      console.error('Sign out failed:', error);
+      alert('Sign out failed. Please try again.');
+    }
+  };
+
   // Show all channels, not just root ones
   const filteredChannels = channels.filter((ch) =>
     ch.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -170,7 +188,7 @@ export default function Sidebar({
           </div>
         )}
 
-        {/* DMS TAB - UPDATED for Phase 2 */}
+        {/* DMS TAB */}
         {activeTab === 'dms' && (
           <div className="py-3 space-y-2">
             {/* All Messages Link */}
@@ -193,12 +211,12 @@ export default function Sidebar({
             </div>
 
             {/* DirectMessagesList Component */}
-            <DirectMessagesList onNewMessage={onNewMessage} />
+            <DirectMessagesList onNewMessage={handleNewMessage} />
 
             {/* New Message Button */}
             <div className="px-4 py-2">
               <button
-                onClick={onNewMessage}
+                onClick={handleNewMessage}
                 className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded transition"
               >
                 + New message
@@ -214,16 +232,34 @@ export default function Sidebar({
               Settings
             </div>
             <div className="px-4 py-3 space-y-2">
-              <button className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded transition">
+              <button
+                onClick={() => {
+                  alert('🎨 Theme settings - Coming soon!');
+                }}
+                className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded transition"
+              >
                 🎨 Theme
               </button>
-              <button className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded transition">
+              <button
+                onClick={() => {
+                  alert('🔔 Notifications settings - Coming soon!');
+                }}
+                className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded transition"
+              >
                 🔔 Notifications
               </button>
-              <button className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded transition">
+              <button
+                onClick={() => {
+                  router.push('/dashboard/profile');
+                }}
+                className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded transition"
+              >
                 👤 Profile
               </button>
-              <button className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded transition">
+              <button
+                onClick={handleSignOut}
+                className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800 hover:text-red-400 rounded transition"
+              >
                 🚪 Sign out
               </button>
             </div>

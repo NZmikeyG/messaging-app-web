@@ -1,73 +1,116 @@
+// src/hooks/usePresence.ts
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useUserStore, type UserPresence } from '@/store/useUserStore'
 import { supabase } from '@/lib/supabase/client'
-import React from 'react'
 
+/**
+ * Hook to manage current user's presence status
+ * SIMPLIFIED: Just marks user online once on mount, then lets subscription handle updates
+ * No heartbeat polling - prevents kick-outs
+ */
 export const usePresence = (userId: string | undefined) => {
   const { setPresence, setError } = useUserStore()
-  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const [mounted, setMounted] = useState(false)
   const isCleaningUpRef = useRef(false)
+  const initTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  // One-time: Mark online when component mounts
   useEffect(() => {
-    if (!userId) return
+    if (!userId) {
+      console.log('⚠️ [PRESENCE] No userId provided')
+      return
+    }
 
-    // Initial presence update
-    const updatePresence = async () => {
+    if (mounted) return
+
+    let isMounted = true
+
+    const initializePresence = async () => {
       try {
+        console.log('🟢 [PRESENCE] Initializing for user:', userId)
+
+        const now = new Date().toISOString()
+
+        // Just insert/update presence once
         const { error } = await supabase
           .from('user_presence')
           .upsert(
             {
               user_id: userId,
               is_online: true,
-              last_seen: new Date().toISOString(),
+              last_seen: now,
+              status: 'online',
             },
             { onConflict: 'user_id' }
           )
 
-        if (error) throw error
+        if (error) {
+          console.error('❌ [PRESENCE] Init error:', {
+            message: error.message,
+            code: error.code,
+            status: error.status,
+          })
+          // Don't return - allow partial success
+        }
 
-        setPresence({
-          user_id: userId,
-          is_online: true,
-          last_seen: new Date().toISOString(),
-        } as UserPresence)
+        console.log('✅ [PRESENCE] User marked online on init')
+
+        if (isMounted) {
+          setMounted(true)
+          setPresence({
+            user_id: userId,
+            is_online: true,
+            last_seen: now,
+            status: 'online',
+          } as UserPresence)
+        }
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to update presence'
-        setError(message)
-        console.error('Error updating presence:', err)
+        console.error('❌ [PRESENCE] Init exception:', err)
+        if (isMounted) {
+          const message =
+            err instanceof Error ? err.message : 'Failed to initialize presence'
+          setError(message)
+        }
       }
     }
 
-    // Update immediately
-    updatePresence()
+    // Small delay to ensure auth is ready
+    initTimeoutRef.current = setTimeout(initializePresence, 100)
 
-    // Set up heartbeat - update every 30 seconds
-    heartbeatIntervalRef.current = setInterval(updatePresence, 30000)
-
-    // Cleanup on unmount
+    // Cleanup: Mark offline on unmount
     return () => {
-      if (heartbeatIntervalRef.current) {
-        clearInterval(heartbeatIntervalRef.current)
+      isMounted = false
+
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current)
       }
 
-      // Mark user as offline
       if (!isCleaningUpRef.current) {
         isCleaningUpRef.current = true
 
         const markOffline = async () => {
           try {
-            await supabase
+            const now = new Date().toISOString()
+            console.log('🔴 [PRESENCE] Marking offline on unmount:', userId)
+
+            const { error } = await supabase
               .from('user_presence')
               .update({
                 is_online: false,
-                last_seen: new Date().toISOString(),
+                last_seen: now,
+                status: 'offline',
               })
               .eq('user_id', userId)
+
+            if (error) {
+              console.warn('⚠️ [PRESENCE] Offline error (non-critical):', error.message)
+            } else {
+              console.log('✅ [PRESENCE] Marked offline successfully')
+            }
           } catch (err) {
-            console.error('Error marking offline:', err)
+            console.error('❌ [PRESENCE] Cleanup error:', err)
           } finally {
             isCleaningUpRef.current = false
           }
@@ -76,82 +119,247 @@ export const usePresence = (userId: string | undefined) => {
         markOffline()
       }
     }
-  }, [userId, setPresence, setError])
+  }, [userId, mounted, setPresence, setError])
 }
 
-// Hook to get other users' presence
+/**
+ * Hook to get and subscribe to all users' presence
+ * Provides real-time updates via Supabase subscriptions (free tier)
+ */
 export const useUserPresenceList = () => {
-  const [presenceList, setPresenceList] = React.useState<UserPresence[]>([])
-  const [loading, setLoading] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
+  const [presenceList, setPresenceList] = useState<UserPresence[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const subscriptionRef = useRef<any>(null)
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  const fetchPresenceList = React.useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
+  useEffect(() => {
+    let isMounted = true
 
-      const { data, error: fetchError } = await supabase
-        .from('user_presence')
-        .select('*')
-        .order('last_seen', { ascending: false })
+    // Initial fetch
+    const fetchPresenceList = async () => {
+      try {
+        setLoading(true)
+        setError(null)
 
-      if (fetchError) throw fetchError
+        console.log('🔵 [PRESENCE LIST] Initial fetch...')
 
-      setPresenceList((data as unknown as UserPresence[]) ?? [])
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch presence list'
-      setError(message)
-      console.error('Error fetching presence list:', err)
-    } finally {
-      setLoading(false)
+        const { data, error: fetchError } = await supabase
+          .from('user_presence')
+          .select('*')
+          .eq('is_online', true)
+          .order('last_seen', { ascending: false })
+
+        if (fetchError) {
+          console.error('❌ [PRESENCE LIST] Fetch error:', fetchError.message)
+          throw fetchError
+        }
+
+        const typedData = (data as unknown as UserPresence[]) ?? []
+
+        if (isMounted) {
+          console.log('✅ [PRESENCE LIST] Fetched:', typedData.length, 'users online')
+          setPresenceList(typedData)
+          setError(null)
+        }
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Failed to fetch presence list'
+        if (isMounted) {
+          setError(message)
+          console.error('❌ [PRESENCE LIST] Error:', message)
+          setPresenceList([])
+        }
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    fetchPresenceList()
+
+    // Setup real-time subscription
+    const setupSubscription = () => {
+      console.log('📡 [PRESENCE LIST] Setting up subscription...')
+
+      subscriptionRef.current = supabase
+        .channel('public:user_presence:real-time', {
+          config: {
+            broadcast: { self: true },
+          },
+        })
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'user_presence',
+          },
+          (payload: any) => {
+            if (!isMounted) return
+
+            console.log('🔄 [PRESENCE LIST] Event:', payload.eventType)
+
+            const newData = payload.new as UserPresence
+            const oldData = payload.old as UserPresence
+
+            setPresenceList((prev) => {
+              if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                if (newData.is_online) {
+                  // User is online - add or update
+                  const index = prev.findIndex((p) => p.user_id === newData.user_id)
+                  if (index >= 0) {
+                    const updated = [...prev]
+                    updated[index] = newData
+                    return updated
+                  } else {
+                    return [...prev, newData]
+                  }
+                } else {
+                  // User went offline - remove
+                  return prev.filter((p) => p.user_id !== newData.user_id)
+                }
+              } else if (payload.eventType === 'DELETE') {
+                return prev.filter((p) => p.user_id !== oldData.user_id)
+              }
+              return prev
+            })
+          }
+        )
+        .subscribe((status: string) => {
+          console.log('📡 [PRESENCE LIST] Subscription status:', status)
+          if (status === 'CLOSED') {
+            console.log('⚠️ [PRESENCE LIST] Subscription closed, reconnecting in 3s...')
+            if (reconnectTimeoutRef.current) {
+              clearTimeout(reconnectTimeoutRef.current)
+            }
+            reconnectTimeoutRef.current = setTimeout(setupSubscription, 3000)
+          } else if (status === 'SUBSCRIBED') {
+            console.log('✅ [PRESENCE LIST] Subscription active')
+          }
+        })
+    }
+
+    setupSubscription()
+
+    // Cleanup
+    return () => {
+      isMounted = false
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe()
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+      }
     }
   }, [])
 
-  React.useEffect(() => {
-    fetchPresenceList()
+  return { presenceList, loading, error }
+}
 
-    // Subscribe to real-time presence changes
-    let subscription: any = null
+/**
+ * Hook to get single user presence with real-time updates
+ */
+export const useUserPresence = (userId: string | undefined) => {
+  const [presence, setPresence] = useState<UserPresence | null>(null)
+  const [loading, setLoading] = useState(true)
+  const subscriptionRef = useRef<any>(null)
 
-    ;(async () => {
+  useEffect(() => {
+    if (!userId) {
+      console.log('⚠️ [USER PRESENCE] No userId provided')
+      setLoading(false)
+      return
+    }
+
+    let isMounted = true
+
+    const fetchPresence = async () => {
       try {
-        subscription = supabase
-          .channel('user_presence')
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 'user_presence',
-            },
-            (payload: any) => {
-              if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
-                setPresenceList((prev) => {
-                  const index = prev.findIndex((p) => p.user_id === (payload.new as UserPresence).user_id)
-                  if (index > -1) {
-                    return [
-                      ...prev.slice(0, index),
-                      payload.new as UserPresence,
-                      ...prev.slice(index + 1),
-                    ]
-                  }
-                  return [payload.new as UserPresence, ...prev]
-                })
-              }
-            }
-          )
-          .subscribe()
-      } catch (err) {
-        console.error('Error setting up subscription:', err)
-      }
-    })()
+        console.log('🔵 [USER PRESENCE] Fetching:', userId)
 
-    return () => {
-      if (subscription) {
-        subscription.unsubscribe()
+        const { data, error } = await supabase
+          .from('user_presence')
+          .select('*')
+          .eq('user_id', userId)
+          .single()
+
+        if (error) {
+          console.warn('⚠️ [USER PRESENCE] Not found:', error.message)
+          if (isMounted) {
+            setPresence(null)
+            setLoading(false)
+          }
+          return
+        }
+
+        if (isMounted) {
+          console.log('✅ [USER PRESENCE] Fetched successfully')
+          setPresence(data as UserPresence)
+          setLoading(false)
+        }
+      } catch (err) {
+        console.error('❌ [USER PRESENCE] Fetch error:', err)
+        if (isMounted) {
+          setPresence(null)
+          setLoading(false)
+        }
       }
     }
-  }, [fetchPresenceList])
 
-  return { presenceList, loading, error }
+    fetchPresence()
+
+    // Subscribe to changes
+    subscriptionRef.current = supabase
+      .channel(`user_presence:${userId}`, {
+        config: {
+          broadcast: { self: true },
+        },
+      })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_presence',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload: any) => {
+          if (!isMounted) return
+
+          console.log('🔄 [USER PRESENCE] Event:', payload.eventType)
+
+          if (payload.eventType === 'DELETE') {
+            console.log('➖ [USER PRESENCE] Presence deleted')
+            setPresence(null)
+          } else {
+            console.log('✅ [USER PRESENCE] Presence updated')
+            setPresence(payload.new as UserPresence)
+          }
+        }
+      )
+      .subscribe((status: string) => {
+        console.log('📡 [USER PRESENCE] Subscription status:', status)
+      })
+
+    return () => {
+      isMounted = false
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe()
+      }
+    }
+  }, [userId])
+
+  return { presence, loading }
+}
+
+/**
+ * Hook to get presence status string for UI
+ */
+export const usePresenceStatus = (userId: string | undefined) => {
+  const { presence, loading } = useUserPresence(userId)
+
+  if (loading) return 'loading'
+  if (!presence) return 'offline'
+  if (presence.is_online) return 'online'
+  return 'offline'
 }

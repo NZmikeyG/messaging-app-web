@@ -1,119 +1,320 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
-import { useUserStore } from '@/store/useUserStore';
-import DMConversation from '@/components/DirectMessages/DMConversation';
-import { supabase } from '@/lib/supabase/client';
-import { UserProfile } from '@/lib/types';
+import { useEffect, useState, useRef } from 'react'
+import { useParams } from 'next/navigation'
+import { useUserStore } from '@/store/useUserStore'
+import {
+  getMessages,
+  sendDirectMessage,
+  subscribeToMessages,
+  type DirectMessage,
+} from '@/lib/supabase/directMessages'
+import { supabase } from '@/lib/supabase/client'
 
-export default function DirectMessageConversationPage() {
-  const router = useRouter();
-  const params = useParams();
-  const { profile } = useUserStore();
-  const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+interface UserProfile {
+  id: string
+  email: string
+  username?: string
+  status?: string
+}
 
-  const userId = params.userId as string;
+export default function DMConversation() {
+  const params = useParams()
+  const { profile: currentUser } = useUserStore()
+  const recipientId = params.userId as string
 
+  const [messages, setMessages] = useState<DirectMessage[]>([])
+  const [otherUser, setOtherUser] = useState<UserProfile | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [messageContent, setMessageContent] = useState('')
+  const [sending, setSending] = useState(false)
+
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null)
+  const loadedRef = useRef(false)
+  const userFetchRef = useRef(false)
+
+  console.log('🔵 RENDER - recipientId:', recipientId, 'currentUser:', currentUser?.id)
+
+  // Fetch recipient user info - ONLY ONCE
   useEffect(() => {
-    if (!profile?.id) {
-      router.push('/auth/login');
-      return;
+    if (userFetchRef.current) {
+      console.log('⚠️ User fetch already running, skipping')
+      return
     }
 
-    if (!userId) {
-      router.push('/dashboard/dm');
-      return;
+    userFetchRef.current = true
+
+    const fetchOtherUser = async () => {
+      try {
+        if (!recipientId) {
+          console.error('❌ No recipientId')
+          setError('No user selected')
+          return
+        }
+
+        console.log('🔵 [USER FETCH] Starting for:', recipientId)
+
+        // Try users table first
+        const { data, error: err1 } = await supabase
+          .from('users')
+          .select('id, email, username, status')
+          .eq('id', recipientId)
+          .maybeSingle()
+
+        console.log('📋 [USER FETCH] Users table result:', data, err1)
+
+        if (data) {
+          console.log('✅ [USER FETCH] Got user from users table:', data)
+          setOtherUser(data as UserProfile)
+          return
+        }
+
+        // Try profiles table
+        const { data: profileData, error: err2 } = await supabase
+          .from('profiles')
+          .select('id, email')
+          .eq('id', recipientId)
+          .maybeSingle()
+
+        console.log('📋 [USER FETCH] Profiles table result:', profileData, err2)
+
+        if (profileData) {
+          console.log('✅ [USER FETCH] Got user from profiles table:', profileData)
+          setOtherUser({
+            id: profileData.id,
+            email: profileData.email,
+            username: profileData.email?.split('@')[0],
+            status: 'offline',
+          } as UserProfile)
+          return
+        }
+
+        // Fallback
+        console.log('⚠️ [USER FETCH] No user found, using fallback')
+        setOtherUser({
+          id: recipientId,
+          email: 'User',
+          username: 'User',
+          status: 'offline',
+        } as UserProfile)
+      } catch (err) {
+        console.error('❌ [USER FETCH] Exception:', err)
+        setOtherUser({
+          id: recipientId,
+          email: 'User',
+          username: 'User',
+          status: 'offline',
+        } as UserProfile)
+      }
     }
 
-    fetchOtherUser();
-  }, [profile?.id, userId, router]);
+    fetchOtherUser()
+  }, [recipientId])
 
-  const fetchOtherUser = async () => {
-    if (!userId) return;
+  // Load messages and subscribe
+  useEffect(() => {
+    if (!currentUser?.id || !recipientId || loadedRef.current) {
+      console.log('⏭️ [MESSAGES] Skipping load:', {
+        hasCurrentUser: !!currentUser?.id,
+        hasRecipientId: !!recipientId,
+        alreadyLoaded: loadedRef.current,
+      })
+      return
+    }
+
+    loadedRef.current = true
+    console.log('🟢 [MESSAGES] Starting message setup')
+
+    const setupMessages = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+
+        console.log('📥 [MESSAGES] Fetching messages between:', currentUser.id, recipientId)
+
+        const data = await getMessages(currentUser.id, recipientId)
+        console.log('✅ [MESSAGES] Got', data?.length ?? 0, 'messages')
+        setMessages(data ?? [])
+        setLoading(false)
+
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+        }, 100)
+
+        // Subscribe to new messages
+        console.log('🔔 [SUBSCRIPTION] Setting up polling')
+        const subscription = subscribeToMessages(
+          currentUser.id,
+          recipientId,
+          (newMessage) => {
+            console.log('📨 [SUBSCRIPTION] New message:', newMessage.id)
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMessage.id)) {
+                console.log('⚠️ Duplicate message, skipping')
+                return prev
+              }
+              const updated = [...prev, newMessage]
+              setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+              }, 0)
+              return updated
+            })
+          }
+        )
+
+        subscriptionRef.current = subscription
+        console.log('✅ [SUBSCRIPTION] Polling started')
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Failed to load'
+        console.error('❌ [MESSAGES] Error:', errorMsg)
+        setError(errorMsg)
+        setMessages([])
+        setLoading(false)
+      }
+    }
+
+    setupMessages()
+
+    return () => {
+      console.log('🛑 [CLEANUP] Unsubscribing from messages')
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe()
+        subscriptionRef.current = null
+      }
+      loadedRef.current = false
+    }
+  }, [currentUser?.id, recipientId])
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!messageContent.trim() || !currentUser?.id || !recipientId) return
 
     try {
-      setLoading(true);
-      setError(null);
+      setSending(true)
+      const content = messageContent
+      console.log('📤 Sending message...')
 
-      const { data, error: err } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      setMessageContent('')
 
-      if (err) throw err;
+      await sendDirectMessage(currentUser.id, recipientId, content)
 
-      setOtherUser(data as UserProfile);
+      console.log('✅ Message sent!')
+
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }, 100)
     } catch (err) {
-      console.error('Error fetching user:', err);
-      setError('Failed to load conversation');
+      const errorMsg = err instanceof Error ? err.message : 'Failed to send'
+      console.error('❌ Error:', errorMsg)
+      setError(errorMsg)
     } finally {
-      setLoading(false);
+      setSending(false)
     }
-  };
+  }
 
   if (loading) {
+    console.log('⏳ Still loading...')
     return (
-      <div className="h-full flex items-center justify-center bg-neutral-900">
+      <div className="h-full flex items-center justify-center flex-col gap-4">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
         <p className="text-gray-400">Loading conversation...</p>
       </div>
-    );
+    )
   }
 
-  if (error || !otherUser) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center bg-neutral-900 gap-4">
-        <p className="text-red-400">{error || 'Failed to load conversation'}</p>
-        <button
-          onClick={() => router.push('/dashboard/dm')}
-          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded transition"
-        >
-          Back to Messages
-        </button>
-      </div>
-    );
-  }
+  console.log('✅ RENDER COMPLETE - otherUser:', otherUser)
 
   return (
-    <div className="h-full flex flex-col bg-neutral-900">
+    <div className="flex flex-col h-full bg-neutral-900">
       {/* Header */}
-      <div className="border-b border-neutral-800 p-4 flex items-center justify-between bg-neutral-800">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push('/dashboard/dm')}
-            className="text-gray-400 hover:text-white transition"
-            title="Back"
-          >
-            ←
-          </button>
+      <div className="border-b border-neutral-800 bg-neutral-800 p-4 shrink-0">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-white">{otherUser.email}</h1>
-            <p className={`text-xs ${otherUser.status === 'online' ? 'text-green-400' : 'text-gray-400'}`}>
-              {otherUser.status === 'online' ? '● Online' : '○ Offline'}
+            <h2 className="text-lg font-semibold text-white">
+              {otherUser?.username || otherUser?.email || 'User'}
+            </h2>
+            <p className="text-sm text-gray-400">
+              {otherUser?.status === 'online' ? (
+                <span className="text-green-400">● Online</span>
+              ) : (
+                <span className="text-gray-500">● Offline</span>
+              )}
             </p>
           </div>
         </div>
-
-        {/* View Profile Button */}
-        <button
-          onClick={() => router.push(`/profile/${userId}`)}
-          className="px-3 py-1 text-sm bg-neutral-700 hover:bg-neutral-600 text-gray-300 rounded transition"
-        >
-          Profile
-        </button>
       </div>
 
-      {/* Conversation */}
-      {profile?.id && (
-        <DMConversation
-          recipientId={userId}
-          recipientName={otherUser.email || 'User'}
-          recipientStatus={otherUser.status || 'offline'}
-        />
-      )}
+      {/* Messages Container */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-neutral-900 flex flex-col">
+        {error && (
+          <div className="p-3 bg-red-900 text-red-100 rounded mb-4 shrink-0">
+            {error}
+          </div>
+        )}
+
+        {messages.length === 0 ? (
+          <div className="text-center text-gray-400 pt-8 shrink-0">
+            <p>No messages yet. Start the conversation!</p>
+          </div>
+        ) : (
+          messages.map((message) => {
+            const isOwn = message.sender_id === currentUser?.id
+            return (
+              <div
+                key={message.id}
+                className={`flex ${isOwn ? 'justify-end' : 'justify-start'} shrink-0`}
+              >
+                <div
+                  className={`max-w-xs px-4 py-2 rounded-lg ${
+                    isOwn
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-neutral-700 text-gray-100'
+                  }`}
+                >
+                  <p className="break-all">{message.content}</p>
+                  <p
+                    className={`text-xs mt-1 ${
+                      isOwn ? 'text-purple-200' : 'text-gray-400'
+                    }`}
+                  >
+                    {new Date(message.created_at).toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                </div>
+              </div>
+            )
+          })
+        )}
+
+        <div ref={messagesEndRef} className="shrink-0" />
+      </div>
+
+      {/* Message Input */}
+      <div className="border-t border-neutral-800 p-4 bg-neutral-800 shrink-0">
+        <form onSubmit={handleSendMessage} className="flex gap-2">
+          <input
+            type="text"
+            value={messageContent}
+            onChange={(e) => setMessageContent(e.target.value)}
+            placeholder="Type a message..."
+            disabled={sending}
+            autoFocus
+            className="flex-1 bg-neutral-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={!messageContent.trim() || sending}
+            className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white px-4 py-2 rounded font-semibold transition shrink-0"
+          >
+            {sending ? 'Sending...' : 'Send'}
+          </button>
+        </form>
+      </div>
     </div>
-  );
+  )
 }

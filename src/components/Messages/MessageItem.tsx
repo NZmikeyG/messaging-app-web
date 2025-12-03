@@ -1,4 +1,7 @@
+'use client'
+
 import React, { useState } from 'react'
+import Image from 'next/image'
 import { useMessageStore } from '@/store/messageStore'
 import { EmojiReactions } from './EmojiReactions'
 import type { Message } from '@/types'
@@ -23,8 +26,6 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   const [isHovering, setIsHovering] = useState(false)
   const { getReactionsForMessage } = useMessageStore()
 
-  console.log('MessageItem render - isHovering:', isHovering, 'hasCallbacks:', { onAddReaction: !!onAddReaction, onDeleteMessage: !!onDeleteMessage })
-
   const handleEdit = async () => {
     if (onEditMessage && editContent.trim()) {
       await onEditMessage(message.id, editContent)
@@ -40,63 +41,67 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 
   const userAvatar = message.profiles?.avatar_url || '/default-avatar.png'
   const username = message.profiles?.username || 'Unknown User'
-  const isEdited = message.edited_at !== null && message.edited_at !== undefined
+  const isEdited =
+    message.edited_at !== null && message.edited_at !== undefined
   const reactions = getReactionsForMessage(message.id)
 
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString()
   }
 
-  return (
-    <div 
-      style={{ position: 'relative', display: 'flex', gap: '12px', padding: '12px', backgroundColor: isHovering ? '#f9fafb' : 'white' }}
-      onMouseEnter={() => {
-        console.log('Mouse enter')
-        setIsHovering(true)
-      }}
-      onMouseLeave={() => {
-        console.log('Mouse leave')
-        setIsHovering(false)
-      }}
-    >
-      <img
-        src={userAvatar}
-        alt={username}
-        style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
-      />
+  const emojis = ['👍', '❤️', '😂', '😮', '😢', '🔥']
 
-      <div style={{ flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-          <span style={{ fontWeight: 'bold', fontSize: '14px' }}>{username}</span>
-          <span style={{ fontSize: '12px', color: '#6b7280' }}>{formatTime(message.created_at)}</span>
-          {isEdited && <span style={{ fontSize: '12px', color: '#9ca3af' }}>(edited)</span>}
+  return (
+    <div
+      className="flex gap-3 p-3 rounded hover:bg-gray-50 transition-colors"
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
+    >
+      {/* Avatar */}
+      <div className="shrink-0">
+        <Image
+          src={userAvatar}
+          alt={username}
+          width={32}
+          height={32}
+          className="rounded-full object-cover"
+          priority={false}
+        />
+      </div>
+
+      {/* Message Content */}
+      <div className="flex-1">
+        <div className="flex items-baseline gap-2">
+          <span className="font-bold text-sm">{username}</span>
+          <span className="text-xs text-gray-500">{formatTime(message.created_at)}</span>
+          {isEdited && <span className="text-xs text-gray-400">(edited)</span>}
         </div>
 
         {isEditing ? (
-          <div style={{ marginTop: '4px' }}>
+          <div className="mt-2">
             <textarea
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
-              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+              className="w-full p-2 border border-gray-300 rounded text-sm"
               rows={2}
             />
-            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+            <div className="flex gap-2 mt-2">
               <button
                 onClick={handleEdit}
-                style={{ padding: '6px 12px', backgroundColor: '#3b82f6', color: 'white', borderRadius: '4px', fontSize: '14px', border: 'none', cursor: 'pointer' }}
+                className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors"
               >
                 Save
               </button>
               <button
                 onClick={() => setIsEditing(false)}
-                style={{ padding: '6px 12px', backgroundColor: '#d1d5db', color: '#374151', borderRadius: '4px', fontSize: '14px', border: 'none', cursor: 'pointer' }}
+                className="px-3 py-1 bg-gray-300 text-gray-800 text-sm rounded hover:bg-gray-400 transition-colors"
               >
                 Cancel
               </button>
             </div>
           </div>
         ) : (
-          <p style={{ fontSize: '14px', color: '#1f2937', marginTop: '4px' }}>{message.content}</p>
+          <p className="text-sm text-gray-900 mt-1">{message.content}</p>
         )}
 
         {reactions && reactions.length > 0 && (
@@ -108,44 +113,46 @@ export const MessageItem: React.FC<MessageItemProps> = ({
         )}
       </div>
 
+      {/* Action Buttons */}
       {isHovering && (
-        <div style={{ display: 'flex', gap: '4px', alignItems: 'flex-start', flexShrink: 0, backgroundColor: 'white', borderRadius: '6px', border: '1px solid #e5e7eb', padding: '4px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', zIndex: 10 }}>
+        <div className="flex gap-1 items-start shrink-0 bg-white rounded-lg border border-gray-200 p-1 shadow-md">
+          {/* Emoji Reactions */}
           {onAddReaction && (
-            <div style={{ display: 'flex', gap: 0 }}>
-              {['thumbsup', 'heart', 'laugh', 'surprised', 'sad', 'fire'].map((emoji, idx) => (
+            <div className="flex gap-0">
+              {emojis.map((emoji, idx) => (
                 <button
                   key={idx}
-                  onClick={() => onAddReaction(message.id, ['👍', '❤️', '😂', '😮', '😢', '🔥'][idx])}
-                  style={{ width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', border: 'none', fontSize: '16px', cursor: 'pointer', borderRadius: '4px' }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  onClick={() => onAddReaction(message.id, emoji)}
+                  className="w-7 h-7 flex items-center justify-center text-base rounded hover:bg-gray-100 transition-colors"
                   title="React"
                 >
-                  {['👍', '❤️', '😂', '😮', '😢', '🔥'][idx]}
+                  {emoji}
                 </button>
               ))}
             </div>
           )}
 
-          <div style={{ width: '1px', backgroundColor: '#e5e7eb', margin: '0 4px' }} />
+          {/* Divider */}
+          {(onAddReaction || onEditMessage || onDeleteMessage) && (
+            <div className="w-px bg-gray-300 mx-1" />
+          )}
 
+          {/* Edit Button */}
           {onEditMessage && (
             <button
               onClick={() => setIsEditing(true)}
-              style={{ width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', border: 'none', fontSize: '16px', cursor: 'pointer', borderRadius: '4px' }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              className="w-7 h-7 flex items-center justify-center text-base rounded hover:bg-gray-100 transition-colors"
               title="Edit"
             >
               ✏️
             </button>
           )}
+
+          {/* Delete Button */}
           {onDeleteMessage && (
             <button
               onClick={handleDelete}
-              style={{ width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', border: 'none', fontSize: '16px', cursor: 'pointer', borderRadius: '4px' }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fee2e2'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              className="w-7 h-7 flex items-center justify-center text-base rounded hover:bg-red-100 transition-colors"
               title="Delete"
             >
               🗑️

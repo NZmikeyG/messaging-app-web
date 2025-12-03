@@ -1,103 +1,146 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useUserStore } from '@/store/useUserStore';
-import { getConversations, Conversation } from '@/lib/supabase/directMessages';
-import Link from 'next/link';
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { useUserStore } from '@/store/useUserStore'
+import { useUserPresenceList } from '@/hooks/usePresence'
+import { supabase } from '@/lib/supabase/client'
+
+interface DirectMessageConversation {
+  id: string
+  other_user_id: string
+  last_message?: string
+  last_message_time?: string
+  other_user?: {
+    id: string
+    email: string
+  }
+}
 
 export default function DirectMessagesPage() {
-  const router = useRouter();
-  const { profile } = useUserStore();
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter()
+  const { profile } = useUserStore()
+  const [conversations, setConversations] = useState<DirectMessageConversation[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!profile?.id) {
-      router.push('/auth/login');
-      return;
-    }
+  const { presenceList, loading: presenceLoading } = useUserPresenceList()
 
-    loadConversations();
-  }, [profile?.id, router]);
-
-  const loadConversations = async () => {
-    if (!profile?.id) return;
+  const fetchConversations = useCallback(async () => {
+    if (!profile?.id) return
 
     try {
-      setLoading(true);
-      setError(null);
-      const data = await getConversations(profile.id);
-      setConversations(data);
+      setLoading(true)
+      setError(null)
+
+      console.log('📥 Fetching conversations for user:', profile.id)
+
+      // Query for messages where user is sender
+      const { data: sentData, error: sentError } = await supabase
+        .from('direct_messages')
+        .select('*')
+        .eq('sender_id', profile.id)
+        .order('created_at', { ascending: false })
+
+      if (sentError) {
+        console.error('❌ Error fetching sent messages:', sentError)
+      }
+
+      // Query for messages where user is recipient (using correct column name)
+      const { data: receivedData, error: receivedError } = await supabase
+        .from('direct_messages')
+        .select('*')
+        .eq('recipient_id', profile.id)
+        .order('created_at', { ascending: false })
+
+      if (receivedError) {
+        console.error('❌ Error fetching received messages:', receivedError)
+      }
+
+      // Combine messages
+      const allMessages = [...(sentData || []), ...(receivedData || [])]
+
+      if (allMessages.length === 0) {
+        setConversations([])
+        return
+      }
+
+      // Group conversations
+      const conversationMap = new Map<string, DirectMessageConversation>()
+
+      for (const msg of allMessages) {
+        const otherUserId = msg.sender_id === profile.id ? msg.recipient_id : msg.sender_id
+
+        const key = [profile.id, otherUserId].sort().join('-')
+
+        if (!conversationMap.has(key)) {
+          conversationMap.set(key, {
+            id: key,
+            other_user_id: otherUserId,
+            last_message: msg.content,
+            last_message_time: msg.created_at,
+            other_user: {
+              id: otherUserId,
+              email: 'Loading...',
+            },
+          })
+        }
+      }
+
+      // Fetch user emails
+      const conversationsWithEmails = await Promise.all(
+        Array.from(conversationMap.values()).map(async (conv) => {
+          try {
+            const { data: userData } = await supabase.auth.admin.getUserById(
+              conv.other_user_id
+            )
+            if (userData?.user?.email) {
+              conv.other_user!.email = userData.user.email
+            }
+          } catch (e) {
+            console.warn(`Failed to fetch user ${conv.other_user_id}:`, e)
+          }
+          return conv
+        })
+      )
+
+      setConversations(conversationsWithEmails)
     } catch (err) {
-      console.error('Error loading conversations:', err);
-      setError('Failed to load conversations');
+      const errorMsg =
+        err instanceof Error ? err.message : 'Failed to load conversations'
+      console.error('❌ Error:', errorMsg)
+      setError(errorMsg)
+      setConversations([])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }, [profile?.id])
 
-  const filteredConversations = conversations.filter((conv) => {
-    const otherUserEmail = conv.other_user?.email || '';
-    return otherUserEmail.toLowerCase().includes(searchQuery.toLowerCase());
-  });
+  useEffect(() => {
+    fetchConversations()
+  }, [fetchConversations])
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'online':
-        return 'bg-green-500';
-      case 'away':
-        return 'bg-yellow-500';
-      default:
-        return 'bg-gray-500';
-    }
-  };
+  const getUserPresence = (userId: string) => {
+    return presenceList.find((p) => p.user_id === userId)
+  }
 
-  const formatLastMessage = (text: string | undefined) => {
-    if (!text) return 'No messages yet';
-    return text.length > 40 ? `${text.substring(0, 40)}...` : text;
-  };
-
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    
-    return date.toLocaleDateString();
-  };
+  if (!profile?.id) {
+    return (
+      <div className="h-full flex items-center justify-center bg-neutral-900">
+        <p className="text-gray-400">Please log in to view messages</p>
+      </div>
+    )
+  }
 
   return (
     <div className="h-full flex flex-col bg-neutral-900">
       {/* Header */}
-      <div className="border-b border-neutral-800 p-4">
-        <h1 className="text-2xl font-bold text-white mb-4">Direct Messages</h1>
-        
-        {/* Search */}
-        <input
-          type="text"
-          placeholder="Search conversations..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full px-3 py-2 bg-neutral-800 text-white rounded placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-        />
+      <div className="border-b border-neutral-800 p-4 bg-neutral-800">
+        <h1 className="text-lg font-bold text-white">Direct Messages</h1>
+        <p className="text-xs text-gray-400 mt-1">
+          {conversations.length} conversation{conversations.length !== 1 ? 's' : ''}
+        </p>
       </div>
-
-      {/* Error Message */}
-      {error && (
-        <div className="px-4 py-2 bg-red-900/50 text-red-200 text-sm">
-          {error}
-        </div>
-      )}
 
       {/* Conversations List */}
       <div className="flex-1 overflow-y-auto">
@@ -105,61 +148,73 @@ export default function DirectMessagesPage() {
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-400">Loading conversations...</p>
           </div>
-        ) : filteredConversations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-4">
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center h-full gap-4 p-4">
+            <p className="text-red-400 text-center">{error}</p>
+            <button
+              onClick={() => fetchConversations()}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded transition"
+            >
+              Retry
+            </button>
+          </div>
+        ) : conversations.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
             <p className="text-gray-400">No conversations yet</p>
-            <p className="text-gray-500 text-sm">Start a new conversation to get started</p>
           </div>
         ) : (
-          <div className="space-y-1 p-2">
-            {filteredConversations.map((conversation) => (
-              <Link
-                key={conversation.id}
-                href={`/dashboard/dm/${conversation.other_user?.id || ''}`}
-                className="flex items-center gap-3 p-3 rounded hover:bg-neutral-800 transition cursor-pointer group"
-              >
-                {/* Status Indicator */}
-                <div className="relative flex-shrink-0">
-                  <div className="w-10 h-10 bg-neutral-700 rounded-full flex items-center justify-center">
-                    <span className="text-sm font-semibold text-gray-200">
-                      {conversation.other_user?.email?.charAt(0).toUpperCase() || '?'}
-                    </span>
-                  </div>
-                  <div
-                    className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-neutral-900 ${getStatusColor(
-                      conversation.other_user?.status || 'offline'
-                    )}`}
-                  />
-                </div>
+          <div className="divide-y divide-neutral-800">
+            {conversations.map((conv) => {
+              const otherUser = conv.other_user
+              const presence = getUserPresence(otherUser?.id || '')
+              const isOnline = presence?.is_online ?? false
 
-                {/* Conversation Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="font-semibold text-white truncate group-hover:text-purple-400 transition">
-                      {conversation.other_user?.email || 'Unknown'}
-                    </h3>
-                    <span className="text-xs text-gray-400 ml-2 flex-shrink-0">
-                      {formatTime(conversation.last_message_at)}
-                    </span>
+              return (
+                <button
+                  key={conv.id}
+                  onClick={() => router.push(`/dashboard/dm/${otherUser?.id}`)}
+                  className="w-full text-left p-4 hover:bg-neutral-800 transition flex items-center justify-between group"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-white font-medium truncate">
+                        {otherUser?.email || 'Unknown'}
+                      </h3>
+                      <div className="shrink-0">
+                        <span
+                          className={`w-2 h-2 rounded-full inline-block ${
+                            presenceLoading
+                              ? 'bg-gray-400'
+                              : isOnline
+                                ? 'bg-green-400'
+                                : 'bg-gray-400'
+                          }`}
+                          title={
+                            presenceLoading
+                              ? 'checking...'
+                              : isOnline
+                                ? 'Online'
+                                : 'Offline'
+                          }
+                        />
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-400 truncate mt-1">
+                      {conv.last_message || 'No messages'}
+                    </p>
                   </div>
-                  <p className="text-sm text-gray-400 truncate">
-                    {formatLastMessage(
-                      // Get the last message from the conversation
-                      // This is a placeholder - you might need to fetch the actual message text
-                      'Last message...'
-                    )}
-                  </p>
-                </div>
 
-                {/* Arrow */}
-                <div className="text-gray-400 group-hover:text-purple-400 transition">
-                  →
-                </div>
-              </Link>
-            ))}
+                  <div className="shrink-0 ml-4 text-xs text-gray-500 group-hover:text-gray-400">
+                    {conv.last_message_time
+                      ? new Date(conv.last_message_time).toLocaleDateString()
+                      : '-'}
+                  </div>
+                </button>
+              )
+            })}
           </div>
         )}
       </div>
     </div>
-  );
+  )
 }
