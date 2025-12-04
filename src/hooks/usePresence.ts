@@ -1,14 +1,38 @@
-// src/hooks/usePresence.ts
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
 import { useUserStore, type UserPresence } from '@/store/useUserStore'
 import { supabase } from '@/lib/supabase/client'
+import type { RealtimeChannel } from '@supabase/supabase-js'
+
+/**
+ * Helper function for proper error logging
+ * CRITICAL FIX #4: Properly extract and log error messages
+ */
+const logPresenceError = (context: string, error: unknown) => {
+  if (error instanceof Error) {
+    console.error(`❌ [PRESENCE] ${context}:`, error.message)
+  } else if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error
+  ) {
+    const err = error as any
+    console.error(
+      `❌ [PRESENCE] ${context}:`,
+      JSON.stringify({ message: err.message, code: err.code }, null, 2)
+    )
+  } else if (typeof error === 'string') {
+    console.error(`❌ [PRESENCE] ${context}:`, error)
+  } else {
+    console.error(`❌ [PRESENCE] ${context}:`, String(error))
+  }
+}
 
 /**
  * Hook to manage current user's presence status
- * SIMPLIFIED: Just marks user online once on mount, then lets subscription handle updates
- * No heartbeat polling - prevents kick-outs
+ * CRITICAL FIX #3: Proper initialization and error handling
+ * Updates presence once on mount, cleans up on unmount
  */
 export const usePresence = (userId: string | undefined) => {
   const { setPresence, setError } = useUserStore()
@@ -18,8 +42,9 @@ export const usePresence = (userId: string | undefined) => {
 
   // One-time: Mark online when component mounts
   useEffect(() => {
+    // CRITICAL FIX: Return early if no userId
     if (!userId) {
-      console.log('⚠️ [PRESENCE] No userId provided')
+      console.log('⚠️ [PRESENCE] No userId provided, skipping presence update')
       return
     }
 
@@ -29,12 +54,12 @@ export const usePresence = (userId: string | undefined) => {
 
     const initializePresence = async () => {
       try {
-        console.log('🟢 [PRESENCE] Initializing for user:', userId)
+        console.log('✅ [PRESENCE] Initializing for userId:', userId)
 
         const now = new Date().toISOString()
 
-        // Just insert/update presence once
-        const { error } = await supabase
+        // CRITICAL FIX: Check for error BEFORE throwing
+        const { error: upsertError, data } = await supabase
           .from('user_presence')
           .upsert(
             {
@@ -46,16 +71,12 @@ export const usePresence = (userId: string | undefined) => {
             { onConflict: 'user_id' }
           )
 
-        if (error) {
-          console.error('❌ [PRESENCE] Init error:', {
-            message: error.message,
-            code: error.code,
-            status: error.status,
-          })
-          // Don't return - allow partial success
+        if (upsertError) {
+          logPresenceError('Supabase upsert failed', upsertError)
+          throw new Error(upsertError.message || 'Unknown upsert error')
         }
 
-        console.log('✅ [PRESENCE] User marked online on init')
+        console.log('✅ [PRESENCE] Presence updated successfully for:', userId)
 
         if (isMounted) {
           setMounted(true)
@@ -67,11 +88,16 @@ export const usePresence = (userId: string | undefined) => {
           } as UserPresence)
         }
       } catch (err) {
-        console.error('❌ [PRESENCE] Init exception:', err)
+        // CRITICAL FIX: Properly extract error message
+        const errorMessage =
+          err instanceof Error ? err.message : String(err) || 'Unknown error'
+        console.error(
+          '❌ [PRESENCE] Error updating presence:',
+          errorMessage
+        )
+        logPresenceError('Presence initialization failed', err)
         if (isMounted) {
-          const message =
-            err instanceof Error ? err.message : 'Failed to initialize presence'
-          setError(message)
+          setError(errorMessage)
         }
       }
     }
@@ -85,6 +111,7 @@ export const usePresence = (userId: string | undefined) => {
 
       if (initTimeoutRef.current) {
         clearTimeout(initTimeoutRef.current)
+        initTimeoutRef.current = null
       }
 
       if (!isCleaningUpRef.current) {
@@ -95,7 +122,7 @@ export const usePresence = (userId: string | undefined) => {
             const now = new Date().toISOString()
             console.log('🔴 [PRESENCE] Marking offline on unmount:', userId)
 
-            const { error } = await supabase
+            const { error: updateError } = await supabase
               .from('user_presence')
               .update({
                 is_online: false,
@@ -104,8 +131,11 @@ export const usePresence = (userId: string | undefined) => {
               })
               .eq('user_id', userId)
 
-            if (error) {
-              console.warn('⚠️ [PRESENCE] Offline error (non-critical):', error.message)
+            if (updateError) {
+              console.warn(
+                '⚠️ [PRESENCE] Offline error (non-critical):',
+                updateError.message
+              )
             } else {
               console.log('✅ [PRESENCE] Marked offline successfully')
             }
@@ -124,13 +154,14 @@ export const usePresence = (userId: string | undefined) => {
 
 /**
  * Hook to get and subscribe to all users' presence
- * Provides real-time updates via Supabase subscriptions (free tier)
+ * CRITICAL FIX #2: Proper cleanup of subscriptions
+ * Provides real-time updates via Supabase subscriptions
  */
 export const useUserPresenceList = () => {
   const [presenceList, setPresenceList] = useState<UserPresence[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const subscriptionRef = useRef<any>(null)
+  const subscriptionRef = useRef<RealtimeChannel | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -151,14 +182,18 @@ export const useUserPresenceList = () => {
           .order('last_seen', { ascending: false })
 
         if (fetchError) {
-          console.error('❌ [PRESENCE LIST] Fetch error:', fetchError.message)
+          logPresenceError('[PRESENCE LIST] Fetch error', fetchError)
           throw fetchError
         }
 
         const typedData = (data as unknown as UserPresence[]) ?? []
 
         if (isMounted) {
-          console.log('✅ [PRESENCE LIST] Fetched:', typedData.length, 'users online')
+          console.log(
+            '✅ [PRESENCE LIST] Fetched:',
+            typedData.length,
+            'users online'
+          )
           setPresenceList(typedData)
           setError(null)
         }
@@ -167,7 +202,7 @@ export const useUserPresenceList = () => {
           err instanceof Error ? err.message : 'Failed to fetch presence list'
         if (isMounted) {
           setError(message)
-          console.error('❌ [PRESENCE LIST] Error:', message)
+          logPresenceError('[PRESENCE LIST] Fetch failed', err)
           setPresenceList([])
         }
       } finally {
@@ -203,10 +238,15 @@ export const useUserPresenceList = () => {
             const oldData = payload.old as UserPresence
 
             setPresenceList((prev) => {
-              if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              if (
+                payload.eventType === 'INSERT' ||
+                payload.eventType === 'UPDATE'
+              ) {
                 if (newData.is_online) {
                   // User is online - add or update
-                  const index = prev.findIndex((p) => p.user_id === newData.user_id)
+                  const index = prev.findIndex(
+                    (p) => p.user_id === newData.user_id
+                  )
                   if (index >= 0) {
                     const updated = [...prev]
                     updated[index] = newData
@@ -228,9 +268,12 @@ export const useUserPresenceList = () => {
         .subscribe((status: string) => {
           console.log('📡 [PRESENCE LIST] Subscription status:', status)
           if (status === 'CLOSED') {
-            console.log('⚠️ [PRESENCE LIST] Subscription closed, reconnecting in 3s...')
+            console.log(
+              '⚠️ [PRESENCE LIST] Subscription closed, reconnecting in 3s...'
+            )
             if (reconnectTimeoutRef.current) {
               clearTimeout(reconnectTimeoutRef.current)
+              reconnectTimeoutRef.current = null
             }
             reconnectTimeoutRef.current = setTimeout(setupSubscription, 3000)
           } else if (status === 'SUBSCRIBED') {
@@ -241,14 +284,16 @@ export const useUserPresenceList = () => {
 
     setupSubscription()
 
-    // Cleanup
+    // CRITICAL FIX #2: Proper cleanup of subscriptions and timeouts
     return () => {
       isMounted = false
       if (subscriptionRef.current) {
         subscriptionRef.current.unsubscribe()
+        subscriptionRef.current = null
       }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
       }
     }
   }, [])
@@ -258,11 +303,12 @@ export const useUserPresenceList = () => {
 
 /**
  * Hook to get single user presence with real-time updates
+ * CRITICAL FIX #2: Proper cleanup of subscriptions
  */
 export const useUserPresence = (userId: string | undefined) => {
   const [presence, setPresence] = useState<UserPresence | null>(null)
   const [loading, setLoading] = useState(true)
-  const subscriptionRef = useRef<any>(null)
+  const subscriptionRef = useRef<RealtimeChannel | null>(null)
 
   useEffect(() => {
     if (!userId) {
@@ -341,10 +387,12 @@ export const useUserPresence = (userId: string | undefined) => {
         console.log('📡 [USER PRESENCE] Subscription status:', status)
       })
 
+    // CRITICAL FIX #2: Proper cleanup
     return () => {
       isMounted = false
       if (subscriptionRef.current) {
         subscriptionRef.current.unsubscribe()
+        subscriptionRef.current = null
       }
     }
   }, [userId])

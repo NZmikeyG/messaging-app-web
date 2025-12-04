@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { useUserStore } from '@/store/useUserStore'
 import {
   getMessages,
@@ -10,6 +10,7 @@ import {
   type DirectMessage,
 } from '@/lib/supabase/directMessages'
 import { supabase } from '@/lib/supabase/client'
+import { useUserPresence } from '@/hooks/usePresence'
 
 interface UserProfile {
   id: string
@@ -20,6 +21,7 @@ interface UserProfile {
 
 export default function DMConversation() {
   const params = useParams()
+  const router = useRouter()
   const { profile: currentUser } = useUserStore()
   const recipientId = params.userId as string
 
@@ -30,31 +32,45 @@ export default function DMConversation() {
   const [messageContent, setMessageContent] = useState('')
   const [sending, setSending] = useState(false)
 
+  // Get recipient's presence status
+  const { presence: recipientPresence } = useUserPresence(recipientId)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null)
   const loadedRef = useRef(false)
-  const userFetchRef = useRef(false)
 
   console.log('🔵 RENDER - recipientId:', recipientId, 'currentUser:', currentUser?.id)
 
-  // Fetch recipient user info - ONLY ONCE
+  // Fetch recipient user info with timeout
   useEffect(() => {
-    if (userFetchRef.current) {
-      console.log('⚠️ User fetch already running, skipping')
+    if (!recipientId) {
+      console.error('❌ No recipientId')
+      setError('No user selected')
       return
     }
 
-    userFetchRef.current = true
+    let isMounted = true
+    let timeoutId: NodeJS.Timeout | null = null
 
     const fetchOtherUser = async () => {
       try {
-        if (!recipientId) {
-          console.error('❌ No recipientId')
-          setError('No user selected')
-          return
-        }
-
         console.log('🔵 [USER FETCH] Starting for:', recipientId)
+
+        // CRITICAL FIX: Add timeout to prevent infinite "Loading..." state
+        timeoutId = setTimeout(() => {
+          if (isMounted && !otherUser) {
+            console.warn(
+              '⚠️ [USER FETCH] Profile loading timeout - using fallback'
+            )
+            setOtherUser({
+              id: recipientId,
+              email: 'User',
+              username: 'User',
+              status: 'offline',
+            } as UserProfile)
+            setLoading(false)
+          }
+        }, 5000)
 
         // Try users table first
         const { data, error: err1 } = await supabase
@@ -65,9 +81,11 @@ export default function DMConversation() {
 
         console.log('📋 [USER FETCH] Users table result:', data, err1)
 
-        if (data) {
+        if (data && isMounted) {
           console.log('✅ [USER FETCH] Got user from users table:', data)
           setOtherUser(data as UserProfile)
+          setLoading(false)
+          if (timeoutId) clearTimeout(timeoutId)
           return
         }
 
@@ -80,37 +98,50 @@ export default function DMConversation() {
 
         console.log('📋 [USER FETCH] Profiles table result:', profileData, err2)
 
-        if (profileData) {
+        if (profileData && isMounted) {
           console.log('✅ [USER FETCH] Got user from profiles table:', profileData)
           setOtherUser({
             id: profileData.id,
             email: profileData.email,
-            username: profileData.email?.split('@')[0],
+            username: profileData.email?.split('@'),
             status: 'offline',
           } as UserProfile)
+          setLoading(false)
+          if (timeoutId) clearTimeout(timeoutId)
           return
         }
 
         // Fallback
-        console.log('⚠️ [USER FETCH] No user found, using fallback')
-        setOtherUser({
-          id: recipientId,
-          email: 'User',
-          username: 'User',
-          status: 'offline',
-        } as UserProfile)
+        if (isMounted) {
+          console.log('⚠️ [USER FETCH] No user found, using fallback')
+          setOtherUser({
+            id: recipientId,
+            email: 'User',
+            username: 'User',
+            status: 'offline',
+          } as UserProfile)
+          setLoading(false)
+        }
       } catch (err) {
         console.error('❌ [USER FETCH] Exception:', err)
-        setOtherUser({
-          id: recipientId,
-          email: 'User',
-          username: 'User',
-          status: 'offline',
-        } as UserProfile)
+        if (isMounted) {
+          setOtherUser({
+            id: recipientId,
+            email: 'User',
+            username: 'User',
+            status: 'offline',
+          } as UserProfile)
+          setLoading(false)
+        }
       }
     }
 
     fetchOtherUser()
+
+    return () => {
+      isMounted = false
+      if (timeoutId) clearTimeout(timeoutId)
+    }
   }, [recipientId])
 
   // Load messages and subscribe
@@ -127,17 +158,25 @@ export default function DMConversation() {
     loadedRef.current = true
     console.log('🟢 [MESSAGES] Starting message setup')
 
+    let isMounted = true
+
     const setupMessages = async () => {
       try {
-        setLoading(true)
+        setLoading(false) // Already have user by this point
         setError(null)
 
-        console.log('📥 [MESSAGES] Fetching messages between:', currentUser.id, recipientId)
+        console.log(
+          '📥 [MESSAGES] Fetching messages between:',
+          currentUser.id,
+          recipientId
+        )
 
         const data = await getMessages(currentUser.id, recipientId)
         console.log('✅ [MESSAGES] Got', data?.length ?? 0, 'messages')
-        setMessages(data ?? [])
-        setLoading(false)
+
+        if (isMounted) {
+          setMessages(data ?? [])
+        }
 
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
@@ -150,17 +189,19 @@ export default function DMConversation() {
           recipientId,
           (newMessage) => {
             console.log('📨 [SUBSCRIPTION] New message:', newMessage.id)
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === newMessage.id)) {
-                console.log('⚠️ Duplicate message, skipping')
-                return prev
-              }
-              const updated = [...prev, newMessage]
-              setTimeout(() => {
-                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-              }, 0)
-              return updated
-            })
+            if (isMounted) {
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === newMessage.id)) {
+                  console.log('⚠️ Duplicate message, skipping')
+                  return prev
+                }
+                const updated = [...prev, newMessage]
+                setTimeout(() => {
+                  messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+                }, 0)
+                return updated
+              })
+            }
           }
         )
 
@@ -169,15 +210,17 @@ export default function DMConversation() {
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Failed to load'
         console.error('❌ [MESSAGES] Error:', errorMsg)
-        setError(errorMsg)
-        setMessages([])
-        setLoading(false)
+        if (isMounted) {
+          setError(errorMsg)
+          setMessages([])
+        }
       }
     }
 
     setupMessages()
 
     return () => {
+      isMounted = false
       console.log('🛑 [CLEANUP] Unsubscribing from messages')
       if (subscriptionRef.current) {
         subscriptionRef.current.unsubscribe()
@@ -237,7 +280,7 @@ export default function DMConversation() {
               {otherUser?.username || otherUser?.email || 'User'}
             </h2>
             <p className="text-sm text-gray-400">
-              {otherUser?.status === 'online' ? (
+              {recipientPresence?.is_online ? (
                 <span className="text-green-400">● Online</span>
               ) : (
                 <span className="text-gray-500">● Offline</span>
