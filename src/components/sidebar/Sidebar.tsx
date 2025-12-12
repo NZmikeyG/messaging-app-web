@@ -93,7 +93,7 @@ export default function Sidebar({
           className="flex-1 text-left hover:opacity-80 transition"
           title="Back to dashboard"
         >
-          <h1 className="text-lg font-bold truncate">My Workspace</h1>
+          <h1 className="text-lg font-bold truncate">Harbour Basketball</h1>
         </button>
         <button
           className="p-1 rounded hover:bg-gray-800 transition flex-shrink-0"

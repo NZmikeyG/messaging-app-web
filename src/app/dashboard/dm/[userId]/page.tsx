@@ -32,16 +32,18 @@ export default function DMConversation() {
   const [messageContent, setMessageContent] = useState('')
   const [sending, setSending] = useState(false)
 
-  // Get recipient's presence status
   const { presence: recipientPresence } = useUserPresence(recipientId)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null)
   const loadedRef = useRef(false)
 
+  // ✅ KEY FIX: Prevent redirect loop
+  const pageLoadedRef = useRef(false)
+
   console.log('🔵 RENDER - recipientId:', recipientId, 'currentUser:', currentUser?.id)
 
-  // Fetch recipient user info with timeout
+  // Fetch recipient user info
   useEffect(() => {
     if (!recipientId) {
       console.error('❌ No recipientId')
@@ -56,12 +58,9 @@ export default function DMConversation() {
       try {
         console.log('🔵 [USER FETCH] Starting for:', recipientId)
 
-        // CRITICAL FIX: Add timeout to prevent infinite "Loading..." state
         timeoutId = setTimeout(() => {
           if (isMounted && !otherUser) {
-            console.warn(
-              '⚠️ [USER FETCH] Profile loading timeout - using fallback'
-            )
+            console.warn('⚠️ [USER FETCH] Profile loading timeout - using fallback')
             setOtherUser({
               id: recipientId,
               email: 'User',
@@ -86,6 +85,7 @@ export default function DMConversation() {
           setOtherUser(data as UserProfile)
           setLoading(false)
           if (timeoutId) clearTimeout(timeoutId)
+          pageLoadedRef.current = true
           return
         }
 
@@ -103,11 +103,12 @@ export default function DMConversation() {
           setOtherUser({
             id: profileData.id,
             email: profileData.email,
-            username: profileData.email?.split('@'),
+            username: profileData.email?.split('@')[0],
             status: 'offline',
           } as UserProfile)
           setLoading(false)
           if (timeoutId) clearTimeout(timeoutId)
+          pageLoadedRef.current = true
           return
         }
 
@@ -121,6 +122,7 @@ export default function DMConversation() {
             status: 'offline',
           } as UserProfile)
           setLoading(false)
+          pageLoadedRef.current = true
         }
       } catch (err) {
         console.error('❌ [USER FETCH] Exception:', err)
@@ -132,6 +134,7 @@ export default function DMConversation() {
             status: 'offline',
           } as UserProfile)
           setLoading(false)
+          pageLoadedRef.current = true
         }
       }
     }
@@ -155,6 +158,9 @@ export default function DMConversation() {
       return
     }
 
+    // ✅ Prevent navigation back to DM list while on this page
+    pageLoadedRef.current = true
+
     loadedRef.current = true
     console.log('🟢 [MESSAGES] Starting message setup')
 
@@ -162,14 +168,10 @@ export default function DMConversation() {
 
     const setupMessages = async () => {
       try {
-        setLoading(false) // Already have user by this point
+        setLoading(false)
         setError(null)
 
-        console.log(
-          '📥 [MESSAGES] Fetching messages between:',
-          currentUser.id,
-          recipientId
-        )
+        console.log('📥 [MESSAGES] Fetching messages between:', currentUser.id, recipientId)
 
         const data = await getMessages(currentUser.id, recipientId)
         console.log('✅ [MESSAGES] Got', data?.length ?? 0, 'messages')
@@ -182,7 +184,6 @@ export default function DMConversation() {
           messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
         }, 100)
 
-        // Subscribe to new messages
         console.log('🔔 [SUBSCRIPTION] Setting up polling')
         const subscription = subscribeToMessages(
           currentUser.id,
@@ -226,7 +227,6 @@ export default function DMConversation() {
         subscriptionRef.current.unsubscribe()
         subscriptionRef.current = null
       }
-      loadedRef.current = false
     }
   }, [currentUser?.id, recipientId])
 

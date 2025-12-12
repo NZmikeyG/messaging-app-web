@@ -13,6 +13,7 @@ interface DirectMessageConversation {
   last_message_time?: string
   other_user?: {
     id: string
+    username: string
     email: string
   }
 }
@@ -46,7 +47,7 @@ export default function DirectMessagesPage() {
         console.error('❌ Error fetching sent messages:', sentError)
       }
 
-      // Query for messages where user is recipient (using correct column name)
+      // Query for messages where user is recipient
       const { data: receivedData, error: receivedError } = await supabase
         .from('direct_messages')
         .select('*')
@@ -81,21 +82,26 @@ export default function DirectMessagesPage() {
             last_message_time: msg.created_at,
             other_user: {
               id: otherUserId,
+              username: 'Loading...',
               email: 'Loading...',
             },
           })
         }
       }
 
-      // Fetch user emails
+      // ✅ FIXED: Fetch user data (username, email) from 'users' table
       const conversationsWithEmails = await Promise.all(
         Array.from(conversationMap.values()).map(async (conv) => {
           try {
-            const { data: userData } = await supabase.auth.admin.getUserById(
-              conv.other_user_id
-            )
-            if (userData?.user?.email) {
-              conv.other_user!.email = userData.user.email
+            const { data: userData, error: userError } = await supabase
+              .from('users')
+              .select('id, email, username')
+              .eq('id', conv.other_user_id)
+              .single()
+
+            if (!userError && userData) {
+              conv.other_user!.username = userData.username || userData.email
+              conv.other_user!.email = userData.email
             }
           } catch (e) {
             console.warn(`Failed to fetch user ${conv.other_user_id}:`, e)
@@ -121,7 +127,9 @@ export default function DirectMessagesPage() {
   }, [fetchConversations])
 
   const getUserPresence = (userId: string) => {
-    return presenceList.find((p) => p.user_id === userId)
+    const presence = presenceList.find((p) => p.user_id === userId)
+    console.log(`🔍 Checking presence for ${userId}:`, presence)
+    return presence
   }
 
   if (!profile?.id) {
@@ -136,10 +144,24 @@ export default function DirectMessagesPage() {
     <div className="h-full flex flex-col bg-neutral-900">
       {/* Header */}
       <div className="border-b border-neutral-800 p-4 bg-neutral-800">
-        <h1 className="text-lg font-bold text-white">Direct Messages</h1>
-        <p className="text-xs text-gray-400 mt-1">
-          {conversations.length} conversation{conversations.length !== 1 ? 's' : ''}
-        </p>
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <h1 className="text-lg font-bold text-white">Direct Messages</h1>
+            <p className="text-xs text-gray-400 mt-1">
+              {conversations.length} conversation{conversations.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              console.log('📝 [DM] New message button clicked')
+              router.push('/dashboard/dm')
+            }}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded font-medium transition shrink-0 whitespace-nowrap ml-4"
+            title="Start a new conversation"
+          >
+            + New Message
+          </button>
+        </div>
       </div>
 
       {/* Conversations List */}
@@ -169,6 +191,8 @@ export default function DirectMessagesPage() {
               const presence = getUserPresence(otherUser?.id || '')
               const isOnline = presence?.is_online ?? false
 
+              console.log(`🟢 Conv: ${otherUser?.username} | Presence: ${presence ? 'YES' : 'NO'} | Online: ${isOnline}`)
+
               return (
                 <button
                   key={conv.id}
@@ -178,7 +202,7 @@ export default function DirectMessagesPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="text-white font-medium truncate">
-                        {otherUser?.email || 'Unknown'}
+                        {otherUser?.username || otherUser?.email || 'Unknown'}
                       </h3>
                       <div className="shrink-0">
                         <span
@@ -187,11 +211,11 @@ export default function DirectMessagesPage() {
                               ? 'bg-gray-400'
                               : isOnline
                                 ? 'bg-green-400'
-                                : 'bg-gray-400'
+                                : 'bg-gray-500'
                           }`}
                           title={
                             presenceLoading
-                              ? 'checking...'
+                              ? 'loading...'
                               : isOnline
                                 ? 'Online'
                                 : 'Offline'
