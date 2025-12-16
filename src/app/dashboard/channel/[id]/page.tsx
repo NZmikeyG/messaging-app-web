@@ -6,6 +6,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useUserStore } from '@/store/useUserStore'
 import { supabase } from '@/lib/supabase/client'
+import { MessageItem } from '@/components/Messages/MessageItem'
 
 const DEFAULT_EMOJIS = ['👍', '😄', '🔥', '💯', '🙏', '🏀']
 const ALL_EMOJIS = [
@@ -91,17 +92,21 @@ export default function ChannelMessagesPage() {
 
         const { data: profilesData } = await supabase
           .from('profiles')
-          .select('id, username')
+          .select('id, username, avatar_url')
           .in('id', userIds)
 
-        const usernameMap = new Map(
-          (profilesData ?? []).map((p: any) => [p.id, p.username])
+        const profileMap = new Map(
+          (profilesData ?? []).map((p: any) => [p.id, p])
         )
 
-        const messagesWithUsernames = (messagesData ?? []).map((msg: any) => ({
-          ...msg,
-          username: usernameMap.get(msg.user_id) || msg.user_id,
-        }))
+        const messagesWithUsernames = (messagesData ?? []).map((msg: any) => {
+          const profile = profileMap.get(msg.user_id)
+          return {
+            ...msg,
+            username: (profile as any)?.username || msg.user_id,
+            user_avatar: (profile as any)?.avatar_url
+          }
+        })
 
         setMessages(messagesWithUsernames as Message[])
       } catch (err) {
@@ -121,7 +126,7 @@ export default function ChannelMessagesPage() {
           .select('*')
           .in('message_id', messages.map((m: any) => m.id))
           .order('created_at', { ascending: false })
-        
+
         const reactionsData = (data as unknown as Reaction[]) ?? []
         setReactions(reactionsData)
 
@@ -130,20 +135,20 @@ export default function ChannelMessagesPage() {
           if (userReactions.length > 0) {
             const uniqueEmojis: string[] = []
             const seen = new Set<string>()
-            
+
             for (const reaction of userReactions) {
               if (!seen.has(reaction.emoji)) {
                 uniqueEmojis.push(reaction.emoji)
                 seen.add(reaction.emoji)
               }
             }
-            
+
             const recentList = uniqueEmojis.slice(0, 6)
             if (recentList.length < 6) {
               const remaining = DEFAULT_EMOJIS.filter(e => !seen.has(e))
               recentList.push(...remaining.slice(0, 6 - recentList.length))
             }
-            
+
             setRecentEmojis(recentList)
           }
         }
@@ -163,15 +168,15 @@ export default function ChannelMessagesPage() {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement
-      
+
       if (target.closest('[data-emoji-picker]')) {
         return
       }
-      
+
       if (target.closest('button[title="Add reaction"]') || target.closest('button[title="Message options"]')) {
         return
       }
-      
+
       if (activeMessageId) {
         setActiveMessageId(null)
         setEmojiPickerPos(null)
@@ -179,7 +184,7 @@ export default function ChannelMessagesPage() {
         setShowAllEmojis(false)
       }
     }
-    
+
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [activeMessageId])
@@ -187,21 +192,21 @@ export default function ChannelMessagesPage() {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement
-      
+
       if (target.closest('[data-message-menu]')) {
         return
       }
-      
+
       if (target.closest('button[title="Message options"]')) {
         return
       }
-      
+
       if (showMessageMenu) {
         setShowMessageMenu(null)
         setMenuPos(null)
       }
     }
-    
+
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showMessageMenu])
@@ -284,13 +289,28 @@ export default function ChannelMessagesPage() {
     }
   }
 
+  const handleEditMessage = async (messageId: string, content: string) => {
+    try {
+      await supabase
+        .from('messages')
+        .update({ content, is_edited: true })
+        .eq('id', messageId)
+
+      setMessages(messages.map((m: any) =>
+        m.id === messageId ? { ...m, content, is_edited: true } : m
+      ))
+    } catch (err) {
+      console.error('Error updating message:', err)
+    }
+  }
+
   const handleDeleteMessage = async (messageId: string) => {
     try {
       await supabase
         .from('messages')
         .delete()
         .eq('id', messageId)
-      
+
       setMessages(messages.filter((m: any) => m.id !== messageId))
       setShowMessageMenu(null)
     } catch (err) {
@@ -328,14 +348,14 @@ export default function ChannelMessagesPage() {
     if (hideTimeoutRef.current) {
       clearTimeout(hideTimeoutRef.current)
     }
-    
+
     const rect = e.currentTarget.getBoundingClientRect()
     let xPos = rect.left - 280
-    
+
     if (xPos < 10) {
       xPos = rect.right + 8
     }
-    
+
     setEmojiPickerPos({ x: xPos, y: rect.top })
     setActiveMessageId(messageId)
     setShowRecentEmojis(true)
@@ -368,132 +388,23 @@ export default function ChannelMessagesPage() {
       </div>
       <div className="flex-1 px-4 py-4 overflow-y-auto" style={{ minHeight: 0 }}>
         <div className="space-y-3 flex flex-col">
-          {messages.map((msg: any) => {
-            const reactionsByEmoji = reactions
-              .filter(r => r.message_id === msg.id)
-              .reduce((acc, r) => {
-                if (!acc[r.emoji]) {
-                  acc[r.emoji] = []
-                }
-                acc[r.emoji].push(r)
-                return acc
-              }, {} as Record<string, Reaction[]>)
-
-            const isOwn = isOwnMessage(msg.user_id)
-
-            return (
-              <div
-                key={msg.id}
-                className={`flex ${isOwn ? 'justify-end' : 'justify-start'} items-end gap-2`}
-                onMouseEnter={() => handleMessageMouseEnter(msg.id)}
-                onMouseLeave={handleMessageMouseLeave}
-              >
-                {!isOwn && (
-                  <div className="flex flex-col items-center">
-                    <div className="text-xs text-gray-400 mb-1">{msg.username}</div>
-                  </div>
-                )}
-
-                <div className={`flex items-end gap-2 max-w-md`}>
-                  {hoveredMessageId === msg.id && !isOwn && (
-                    <div className="flex flex-col gap-1">
-                      {isOwn && (
-                        <button
-                          onClick={(e) => handleMenuClick(e, msg.id)}
-                          className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded transition cursor-pointer text-sm"
-                          type="button"
-                          title="Message options"
-                        >
-                          ⋯
-                        </button>
-                      )}
-                      <button
-                        onClick={(e) => handleSmileyClick(e, msg.id)}
-                        onMouseEnter={() => handleButtonMouseEnter(msg.id)}
-                        className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded transition cursor-pointer text-sm"
-                        type="button"
-                        title="Add reaction"
-                      >
-                        🙂
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="flex flex-col gap-1">
-                    <div
-                      className={`px-4 py-2 rounded-2xl wrap-break-word ${
-                        isOwn
-                          ? 'bg-blue-600 text-white rounded-br-none'
-                          : 'bg-gray-300 text-black rounded-bl-none'
-                      }`}
-                    >
-                      <p className="text-sm">{msg.content}</p>
-                      <p className={`text-xs mt-1 ${isOwn ? 'text-blue-100' : 'text-gray-600'}`}>
-                        {msg.created_at
-                          ? new Date(msg.created_at).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : ''}
-                      </p>
-                    </div>
-
-                    {Object.keys(reactionsByEmoji).length > 0 && (
-                      <div className="flex gap-1 flex-wrap px-2">
-                        {Object.entries(reactionsByEmoji).map(([emoji, reactors]) => (
-                          <button
-                            key={emoji}
-                            onClick={() => handleToggleReaction(msg.id, emoji)}
-                            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-all ${
-                              reactors.some(r => r.user_id === userProfile?.id)
-                                ? 'bg-blue-200 border-blue-400'
-                                : 'bg-gray-200 border-gray-300 hover:bg-gray-300'
-                            }`}
-                            type="button"
-                          >
-                            <span>{emoji}</span>
-                            <span className="text-xs">{reactors.length > 1 ? reactors.length : ''}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {hoveredMessageId === msg.id && isOwn && (
-                    <div className="flex flex-col gap-1">
-                      <button
-                        onClick={(e) => handleMenuClick(e, msg.id)}
-                        className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded transition cursor-pointer text-sm"
-                        type="button"
-                        title="Message options"
-                      >
-                        ⋯
-                      </button>
-                      <button
-                        onClick={(e) => handleSmileyClick(e, msg.id)}
-                        onMouseEnter={() => handleButtonMouseEnter(msg.id)}
-                        className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded transition cursor-pointer text-sm"
-                        type="button"
-                        title="Add reaction"
-                      >
-                        🙂
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {isOwn && (
-                  <div className="w-8" />
-                )}
-              </div>
-            )
-          })}
+          {messages.map((msg: any) => (
+            <MessageItem
+              key={msg.id}
+              message={msg}
+              reactions={reactions.filter(r => r.message_id === msg.id)}
+              onEditMessage={handleEditMessage}
+              onDeleteMessage={handleDeleteMessage}
+              onAddReaction={handleToggleReaction}
+              onRemoveReaction={() => Promise.resolve()}
+            />
+          ))}
           <div ref={bottomScrollRef} />
         </div>
       </div>
 
       {showMessageMenu && menuPos && (
-        <div 
+        <div
           data-message-menu="true"
           style={{
             position: 'fixed',
@@ -539,7 +450,7 @@ export default function ChannelMessagesPage() {
       )}
 
       {activeMessageId && emojiPickerPos && showRecentEmojis && !showAllEmojis && (
-        <div 
+        <div
           data-emoji-picker="true"
           style={{
             position: 'fixed',
@@ -579,7 +490,7 @@ export default function ChannelMessagesPage() {
       )}
 
       {activeMessageId && emojiPickerPos && showAllEmojis && (
-        <div 
+        <div
           data-emoji-picker="true"
           style={{
             position: 'fixed',

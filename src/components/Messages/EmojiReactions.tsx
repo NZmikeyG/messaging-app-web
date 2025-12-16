@@ -4,20 +4,24 @@ import type { Message, MessageReaction } from '@/types'
 
 interface EmojiReactionsProps {
   message: Message
+  reactions?: MessageReaction[]
   onAddReaction?: (messageId: string, emoji: string) => Promise<void>
   onRemoveReaction?: (reactionId: string) => Promise<void>
 }
 
-const EMOJI_REACTIONS = ['\ud83d\udc4d', '\u2764\ufe0f', '\ud83d\ude02', '\ud83d\ude2e', '\ud83d\ude22', '\ud83d\udd25']
+import { EMOJI_LIST, COMMON_EMOJIS } from '@/constants/emojis'
+
+const EMOJI_REACTIONS = EMOJI_LIST
 
 export const EmojiReactions: React.FC<EmojiReactionsProps> = ({
   message,
+  reactions: propReactions,
   onAddReaction,
   onRemoveReaction,
 }) => {
   const [showPicker, setShowPicker] = useState(false)
   const { getReactionsForMessage } = useMessageStore()
-  const reactions = getReactionsForMessage(message.id)
+  const reactions = propReactions || getReactionsForMessage(message.id)
 
   // Group reactions by emoji and count them
   const groupedReactions = reactions.reduce(
@@ -56,7 +60,7 @@ export const EmojiReactions: React.FC<EmojiReactionsProps> = ({
         <button
           key={emoji}
           onClick={() => handleRemoveReaction(emojiReactions[0])}
-          className="px-2 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-sm flex items-center gap-1"
+          className="px-2 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-sm flex items-center gap-1 text-gray-900"
         >
           <span>{emoji}</span>
           <span className="text-xs text-gray-600">{emojiReactions.length}</span>
@@ -78,7 +82,7 @@ export const EmojiReactions: React.FC<EmojiReactionsProps> = ({
                 <button
                   key={emoji}
                   onClick={() => handleAddReaction(emoji)}
-                  className="text-xl hover:bg-gray-100 rounded p-1"
+                  className="text-xl hover:bg-gray-100 rounded p-1 text-gray-900"
                 >
                   {emoji}
                 </button>

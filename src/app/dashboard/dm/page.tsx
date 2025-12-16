@@ -6,22 +6,15 @@ import { useUserStore } from '@/store/useUserStore'
 import { useUserPresenceList } from '@/hooks/usePresence'
 import { supabase } from '@/lib/supabase/client'
 
-interface DirectMessageConversation {
-  id: string
-  other_user_id: string
-  last_message?: string
-  last_message_time?: string
-  other_user?: {
-    id: string
-    username: string
-    email: string
-  }
-}
+import {
+  getConversations,
+  type Conversation,
+} from '@/lib/supabase/directMessages'
 
 export default function DirectMessagesPage() {
   const router = useRouter()
   const { profile } = useUserStore()
-  const [conversations, setConversations] = useState<DirectMessageConversation[]>([])
+  const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -34,83 +27,8 @@ export default function DirectMessagesPage() {
       setLoading(true)
       setError(null)
 
-      console.log('📥 Fetching conversations for user:', profile.id)
-
-      // Query for messages where user is sender
-      const { data: sentData, error: sentError } = await supabase
-        .from('direct_messages')
-        .select('*')
-        .eq('sender_id', profile.id)
-        .order('created_at', { ascending: false })
-
-      if (sentError) {
-        console.error('❌ Error fetching sent messages:', sentError)
-      }
-
-      // Query for messages where user is recipient
-      const { data: receivedData, error: receivedError } = await supabase
-        .from('direct_messages')
-        .select('*')
-        .eq('recipient_id', profile.id)
-        .order('created_at', { ascending: false })
-
-      if (receivedError) {
-        console.error('❌ Error fetching received messages:', receivedError)
-      }
-
-      // Combine messages
-      const allMessages = [...(sentData || []), ...(receivedData || [])]
-
-      if (allMessages.length === 0) {
-        setConversations([])
-        return
-      }
-
-      // Group conversations
-      const conversationMap = new Map<string, DirectMessageConversation>()
-
-      for (const msg of allMessages) {
-        const otherUserId = msg.sender_id === profile.id ? msg.recipient_id : msg.sender_id
-
-        const key = [profile.id, otherUserId].sort().join('-')
-
-        if (!conversationMap.has(key)) {
-          conversationMap.set(key, {
-            id: key,
-            other_user_id: otherUserId,
-            last_message: msg.content,
-            last_message_time: msg.created_at,
-            other_user: {
-              id: otherUserId,
-              username: 'Loading...',
-              email: 'Loading...',
-            },
-          })
-        }
-      }
-
-      // ✅ FIXED: Fetch user data (username, email) from 'users' table
-      const conversationsWithEmails = await Promise.all(
-        Array.from(conversationMap.values()).map(async (conv) => {
-          try {
-            const { data: userData, error: userError } = await supabase
-              .from('users')
-              .select('id, email, username')
-              .eq('id', conv.other_user_id)
-              .single()
-
-            if (!userError && userData) {
-              conv.other_user!.username = userData.username || userData.email
-              conv.other_user!.email = userData.email
-            }
-          } catch (e) {
-            console.warn(`Failed to fetch user ${conv.other_user_id}:`, e)
-          }
-          return conv
-        })
-      )
-
-      setConversations(conversationsWithEmails)
+      const data = await getConversations(profile.id)
+      setConversations(data)
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : 'Failed to load conversations'
@@ -123,12 +41,13 @@ export default function DirectMessagesPage() {
   }, [profile?.id])
 
   useEffect(() => {
-    fetchConversations()
-  }, [fetchConversations])
+    if (profile?.id) {
+      fetchConversations()
+    }
+  }, [fetchConversations, profile?.id])
 
   const getUserPresence = (userId: string) => {
     const presence = presenceList.find((p) => p.user_id === userId)
-    console.log(`🔍 Checking presence for ${userId}:`, presence)
     return presence
   }
 
@@ -206,13 +125,12 @@ export default function DirectMessagesPage() {
                       </h3>
                       <div className="shrink-0">
                         <span
-                          className={`w-2 h-2 rounded-full inline-block ${
-                            presenceLoading
-                              ? 'bg-gray-400'
-                              : isOnline
-                                ? 'bg-green-400'
-                                : 'bg-gray-500'
-                          }`}
+                          className={`w-2 h-2 rounded-full inline-block ${presenceLoading
+                            ? 'bg-gray-400'
+                            : isOnline
+                              ? 'bg-green-400'
+                              : 'bg-gray-500'
+                            }`}
                           title={
                             presenceLoading
                               ? 'loading...'
@@ -224,13 +142,13 @@ export default function DirectMessagesPage() {
                       </div>
                     </div>
                     <p className="text-sm text-gray-400 truncate mt-1">
-                      {conv.last_message || 'No messages'}
+                      {conv.last_message_content || 'No messages'}
                     </p>
                   </div>
 
                   <div className="shrink-0 ml-4 text-xs text-gray-500 group-hover:text-gray-400">
-                    {conv.last_message_time
-                      ? new Date(conv.last_message_time).toLocaleDateString()
+                    {conv.last_message_at
+                      ? new Date(conv.last_message_at).toLocaleDateString()
                       : '-'}
                   </div>
                 </button>

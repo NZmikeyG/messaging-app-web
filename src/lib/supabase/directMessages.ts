@@ -1,9 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
+'use client'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+import { supabase } from './client'
 
 export interface DirectMessage {
   id: string
@@ -11,8 +8,9 @@ export interface DirectMessage {
   recipient_id: string
   content: string
   created_at: string
-  updated_at: string
+  updated_at?: string
   is_read: boolean
+  reactions?: Record<string, string[]> // { "emoji": ["userId1", "userId2"] }
 }
 
 export interface Conversation {
@@ -21,6 +19,7 @@ export interface Conversation {
   user_2_id: string
   last_message_id: string | null
   last_message_at: string
+  last_message_content?: string
   other_user?: {
     id: string
     email: string
@@ -33,6 +32,8 @@ export interface Conversation {
 // Fetch all conversations for a user
 export const getConversations = async (userId: string): Promise<Conversation[]> => {
   try {
+    console.log('📥 [CONVERSATIONS] Fetching for user:', userId)
+
     const { data, error } = await supabase
       .from('direct_messages')
       .select('*')
@@ -44,10 +45,15 @@ export const getConversations = async (userId: string): Promise<Conversation[]> 
       return []
     }
 
+    if (!data || data.length === 0) {
+      console.log('ℹ️ No conversations found')
+      return []
+    }
+
     // Group conversations and get latest message from each user
     const conversationMap = new Map<string, Conversation>()
 
-    data?.forEach((msg) => {
+    data.forEach((msg: any) => {
       const otherUserId = msg.sender_id === userId ? msg.recipient_id : msg.sender_id
 
       // Skip if we already have a conversation with this user
@@ -59,48 +65,83 @@ export const getConversations = async (userId: string): Promise<Conversation[]> 
         user_2_id: otherUserId,
         last_message_id: msg.id,
         last_message_at: msg.created_at,
+        last_message_content: msg.content,
         other_user: undefined,
       })
     })
 
     // Fetch user info for each conversation
     const userIds = Array.from(conversationMap.keys())
-
     if (userIds.length === 0) return []
 
-    console.log('🔵 Fetching user data for conversations:', userIds)
+    console.log('🔵 Fetching user data for conversations:', userIds.length)
 
-    const { data: usersData, error: usersError } = await supabase
-      .from('users')
-      .select('id, email, username, avatar_url, status')
+    // Fetch user info from 'profiles' (source of truth for name/avatar)
+    const { data: profilesData, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, username, avatar_url, email')
       .in('id', userIds)
 
-    if (usersError) {
-      console.error('❌ Error fetching users:', usersError)
-      return Array.from(conversationMap.values())
+    if (profilesError) {
+      console.error('❌ Error fetching profiles:', profilesError)
+    }
+
+    // Fetch user presence (source of truth for status)
+    const { data: presenceData, error: presenceError } = await supabase
+      .from('user_presence')
+      .select('user_id, status, is_online')
+      .in('user_id', userIds)
+
+    if (presenceError) {
+      console.warn('⚠️ Error fetching presence:', presenceError)
+    }
+
+    // Fallback: Fetch from 'users' table if profiles missing (legacy/backup)
+    let usersData: any[] = []
+    if (!profilesData || profilesData.length < userIds.length) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, email, username, avatar_url')
+        .in('id', userIds)
+      if (data) usersData = data
     }
 
     // Map user data to conversations
     const conversations = Array.from(conversationMap.values()).map((conv) => {
-      const userData = usersData?.find((u) => u.id === conv.user_2_id)
+      // 1. Try profile first
+      let userData: any = profilesData?.find((u: any) => u.id === conv.user_2_id)
+
+      // 2. Fallback to users table
+      if (!userData) {
+        userData = usersData?.find((u: any) => u.id === conv.user_2_id)
+      }
+
+      // 3. Get presence
+      const presence = presenceData?.find((p: any) => p.user_id === conv.user_2_id)
+
       if (userData) {
         conv.other_user = {
           id: userData.id,
           email: userData.email || 'Unknown',
           username: userData.username || userData.email?.split('@')[0] || 'User',
           avatar_url: userData.avatar_url || null,
-          status: userData.status || 'offline',
+          status: presence?.status || 'offline', // Use real presence status
         }
-        console.log('✅ User mapped:', {
-          id: userData.id,
-          username: userData.username,
-          email: userData.email,
-        })
+      } else {
+        // Absolute fallback if everything fails
+        conv.other_user = {
+          id: conv.user_2_id,
+          email: 'Unknown',
+          username: 'User',
+          avatar_url: null,
+          status: 'offline'
+        }
       }
+
       return conv
     })
 
-    console.log('✅ Conversations fetched with user data:', conversations.length)
+    console.log('✅ Conversations fetched:', conversations.length)
     return conversations
   } catch (error) {
     console.error('❌ Error in getConversations:', error)
@@ -113,21 +154,28 @@ export const getMessages = async (
   userId: string,
   otherUserId: string,
   limit = 50
-): Promise<DirectMessage[]> => {
+): Promise<DirectMessage[] | null> => {
   try {
+    console.log('📥 [MESSAGES] Fetching between:', userId, otherUserId)
+
     const { data, error } = await supabase
       .from('direct_messages')
       .select('*')
       .or(
         `and(sender_id.eq.${userId},recipient_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},recipient_id.eq.${userId})`
       )
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: true })
       .limit(limit)
 
-    if (error) throw error
-    return data?.reverse() || []
+    if (error) {
+      console.error('❌ [MESSAGES] Error:', error)
+      throw error
+    }
+
+    console.log('✅ [MESSAGES] Got', data?.length ?? 0, 'messages')
+    return data || []
   } catch (error) {
-    console.error('Error fetching messages:', error)
+    console.error('❌ Exception in getMessages:', error)
     throw error
   }
 }
@@ -139,32 +187,37 @@ export const sendDirectMessage = async (
   content: string
 ): Promise<DirectMessage> => {
   try {
+    console.log('📤 [SEND] From:', senderId, 'To:', recipientId, 'Content:', content)
+
+    if (!senderId || !recipientId || !content.trim()) {
+      throw new Error('Missing sender, recipient, or content')
+    }
+
     const { data, error } = await supabase
       .from('direct_messages')
-      .insert({
-        sender_id: senderId,
-        recipient_id: recipientId,
-        content,
-      })
+      .insert([
+        {
+          sender_id: senderId,
+          recipient_id: recipientId,
+          content: content.trim(),
+          is_read: false,
+        },
+      ])
       .select()
-      .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ [SEND] Supabase error:', error)
+      throw error
+    }
 
-    // Update or create conversation
-    const normalizedUser1 = senderId < recipientId ? senderId : recipientId
-    const normalizedUser2 = senderId < recipientId ? recipientId : senderId
+    if (!data || data.length === 0) {
+      throw new Error('No data returned from insert')
+    }
 
-    await supabase.from('conversations').upsert({
-      user_1_id: normalizedUser1,
-      user_2_id: normalizedUser2,
-      last_message_id: data.id,
-      last_message_at: new Date().toISOString(),
-    })
-
-    return data
+    console.log('✅ [SEND] Message sent:', data[0].id)
+    return data[0] as DirectMessage
   } catch (error) {
-    console.error('Error sending message:', error)
+    console.error('❌ [SEND] Exception:', error)
     throw error
   }
 }
@@ -183,7 +236,7 @@ export const markMessagesAsRead = async (
 
     if (error) throw error
   } catch (error) {
-    console.error('Error marking messages as read:', error)
+    console.error('❌ Error marking messages as read:', error)
   }
 }
 
@@ -203,7 +256,77 @@ export const updateUserStatus = async (
 
     if (error) throw error
   } catch (error) {
-    console.error('Error updating user status:', error)
+    console.error('❌ Error updating user status:', error)
+  }
+}
+
+// Update a direct message
+export const updateDirectMessage = async (
+  messageId: string,
+  content: string
+): Promise<DirectMessage> => {
+  try {
+    const { data, error } = await supabase
+      .from('direct_messages')
+      .update({
+        content,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', messageId)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data as DirectMessage
+  } catch (error) {
+    console.error('❌ Error updating direct message:', error)
+    throw error
+  }
+}
+
+// Delete a direct message
+export const deleteDirectMessage = async (messageId: string): Promise<void> => {
+  try {
+    const { error } = await supabase
+      .from('direct_messages')
+      .delete()
+      .eq('id', messageId)
+
+    if (error) throw error
+  } catch (error) {
+    console.error('❌ Error deleting direct message:', error)
+    throw error
+  }
+}
+
+// Add Reaction
+export const addReaction = async (
+  messageId: string,
+  emoji: string,
+  userId: string,
+  currentReactions: Record<string, string[]> = {}
+): Promise<void> => {
+  try {
+    const updatedReactions = { ...currentReactions }
+    if (!updatedReactions[emoji]) updatedReactions[emoji] = []
+
+    // Toggle reaction
+    if (updatedReactions[emoji].includes(userId)) {
+      updatedReactions[emoji] = updatedReactions[emoji].filter(id => id !== userId)
+      if (updatedReactions[emoji].length === 0) delete updatedReactions[emoji]
+    } else {
+      updatedReactions[emoji].push(userId)
+    }
+
+    const { error } = await supabase
+      .from('direct_messages')
+      .update({ reactions: updatedReactions })
+      .eq('id', messageId)
+
+    if (error) throw error
+  } catch (error) {
+    console.error('❌ Error adding reaction:', error)
+    throw error
   }
 }
 
@@ -244,10 +367,19 @@ export const subscribeToMessages = (
       if (error) {
         // "no rows" is not really an error, it just means no messages yet
         if (!error.message.includes('no rows')) {
-          console.error('Error polling messages:', error)
+          console.error('❌ [POLLING] Error:', error)
           consecutiveErrors = Math.min(consecutiveErrors + 1, MAX_CONSECUTIVE_ERRORS)
+        } else {
+          // Reset error counter on successful poll
+          consecutiveErrors = 0
+
+          // If we got a new message different from the last one
+          if (data && data.id !== lastMessageId) {
+            lastMessageId = data.id
+            console.log('📨 [POLLING] New message:', data.id)
+            callback(data as DirectMessage)
+          }
         }
-        // Reset consecutive errors on "no rows" success
       } else {
         // Reset error counter on successful poll
         consecutiveErrors = 0
@@ -255,13 +387,15 @@ export const subscribeToMessages = (
         // If we got a new message different from the last one
         if (data && data.id !== lastMessageId) {
           lastMessageId = data.id
+          console.log('📨 [POLLING] New message:', data.id)
           callback(data as DirectMessage)
         }
       }
     } catch (error) {
       if (error instanceof Error) {
-        console.error('Unexpected error polling messages:', error.message)
+        console.error('❌ [POLLING] Unexpected error:', error.message)
       }
+
       consecutiveErrors = Math.min(consecutiveErrors + 1, MAX_CONSECUTIVE_ERRORS)
     }
 
@@ -281,6 +415,8 @@ export const subscribeToMessages = (
       if (pollTimeout) {
         clearTimeout(pollTimeout)
       }
+
+      console.log('🛑 [POLLING] Unsubscribed')
     },
   }
 }

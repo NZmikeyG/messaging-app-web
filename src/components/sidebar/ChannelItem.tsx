@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Channel } from '@/lib/types';
+import { Channel } from '@/types';
 
 interface ChannelItemProps {
   channel: Channel;
@@ -36,11 +36,10 @@ export default function ChannelItem({
   return (
     <div>
       <div
-        className={`flex items-center gap-1 px-3 py-1.5 rounded cursor-pointer transition-colors mx-1 ${
-          isActive 
-            ? 'bg-blue-600 text-white' 
+        className={`flex items-center gap-1 px-3 py-1.5 rounded cursor-pointer transition-colors mx-1 ${isActive
+            ? 'bg-blue-600 text-white'
             : 'text-gray-300 hover:bg-gray-800'
-        }`}
+          }`}
         onClick={() => onChannelSelect(channel.id)}
         style={{ marginLeft: `${depth * 12}px` }}
       >

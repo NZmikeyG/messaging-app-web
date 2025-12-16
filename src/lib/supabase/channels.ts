@@ -1,38 +1,79 @@
 'use client'
 
 import { supabase } from './client'
-import type { Channel, ChannelHierarchy } from '@/lib/types'
+import type { Channel, ChannelHierarchy } from '@/types'
 
 /**
  * Get all channels in a workspace with their hierarchy
  */
-export async function getChannelHierarchy(workspaceId: string) {
-  const { data, error } = await supabase.rpc('get_channel_hierarchy', {
-    workspace_id_param: workspaceId,
-  })
+export async function getChannelHierarchy(
+  workspaceId: string
+): Promise<ChannelHierarchy[]> {
+  try {
+    console.log('📥 [CHANNELS] Fetching hierarchy for workspace:', workspaceId)
 
-  if (error) {
-    console.error('Error fetching channel hierarchy:', error)
+    // Try RPC first
+    const { data, error } = await supabase.rpc('get_channel_hierarchy', {
+      workspace_id_param: workspaceId,
+    })
+
+    if (error) {
+      // Silence known RPC type mismatch error (42804) or bad request (400) as we have a robust fallback
+      if (error.code !== '42804' && error.code !== 'PGRST202') {
+        console.log('ℹ️ [CHANNELS] RPC unavailable, using fallback:', error.message)
+      }
+
+      // Fallback: query channels table directly
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('channels')
+        .select('id, name, description, is_private, parent_id, created_at, creator_id')
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: true })
+
+      if (fallbackError) {
+        console.error('❌ [CHANNELS] Fallback query failed:', fallbackError)
+        throw fallbackError
+      }
+
+      console.log('✅ [CHANNELS] Got', fallbackData?.length ?? 0, 'channels (fallback)')
+      return (fallbackData || []) as ChannelHierarchy[]
+    }
+
+    console.log('✅ [CHANNELS] Got', data?.length ?? 0, 'channels (RPC)')
+    return (data || []) as ChannelHierarchy[]
+  } catch (error) {
+    console.error('❌ [CHANNELS] Exception:', error)
     throw error
   }
-
-  return data as ChannelHierarchy[]
 }
 
 /**
  * Get all descendants of a specific channel
  */
-export async function getChannelDescendants(channelId: string) {
-  const { data, error } = await supabase.rpc('get_channel_descendants', {
-    channel_id_param: channelId,
-  })
+export async function getChannelDescendants(channelId: string): Promise<Channel[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_channel_descendants', {
+      channel_id_param: channelId,
+    })
 
-  if (error) {
-    console.error('Error fetching channel descendants:', error)
+    if (error) {
+      console.warn('⚠️ Fallback for descendants:', error)
+
+      // Fallback: manual recursive query
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('channels')
+        .select('id, name, description, is_private, parent_id, created_at, creator_id')
+        .eq('parent_id', channelId)
+
+      if (fallbackError) throw fallbackError
+      return (fallbackData || []) as Channel[]
+    }
+
+    return (data || []) as Channel[]
+  } catch (error) {
+    console.error('❌ Error fetching channel descendants:', error)
     throw error
   }
-
-  return data as Channel[]
 }
 
 /**
@@ -50,36 +91,44 @@ export async function createChannel({
   description?: string
   isPrivate?: boolean
   parentId?: string
-}) {
-  const { data: sessionData } = await supabase.auth.getSession()
-  const userId = sessionData.session?.user.id
+}): Promise<Channel> {
+  try {
+    console.log('📤 [CHANNELS] Creating channel:', name)
 
-  if (!userId) {
-    throw new Error('User not authenticated')
-  }
+    const { data: sessionData } = await supabase.auth.getSession()
+    const userId = sessionData.session?.user.id
 
-  const { data, error } = await supabase
-    .from('channels')
-    .insert({
-      workspace_id: workspaceId,
-      name,
-      description,
-      is_private: isPrivate,
-      parent_id: parentId || null,
-      creator_id: userId,
-    })
-    .select()
-    .single()
+    if (!userId) {
+      throw new Error('User not authenticated')
+    }
 
-  if (error) {
-    console.error('Error creating channel:', error)
+    const { data, error } = await supabase
+      .from('channels')
+      .insert({
+        workspace_id: workspaceId,
+        name,
+        description: description || null,
+        is_private: isPrivate,
+        parent_id: parentId || null,
+        creator_id: userId,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('❌ Error creating channel:', error)
+      throw error
+    }
+
+    // Add creator as channel owner
+    await addChannelMember(data.id, userId, 'owner')
+
+    console.log('✅ [CHANNELS] Channel created:', data.id)
+    return data as Channel
+  } catch (error) {
+    console.error('❌ Exception in createChannel:', error)
     throw error
   }
-
-  // Add creator as channel owner
-  await addChannelMember(data.id, userId, 'owner')
-
-  return data as Channel
 }
 
 /**
@@ -88,33 +137,63 @@ export async function createChannel({
 export async function updateChannel(
   channelId: string,
   updates: Partial<Channel>
-) {
-  const { data, error } = await supabase
-    .from('channels')
-    .update(updates)
-    .eq('id', channelId)
-    .select()
-    .single()
+): Promise<Channel> {
+  try {
+    const { data, error } = await supabase
+      .from('channels')
+      .update(updates)
+      .eq('id', channelId)
+      .select()
+      .single()
 
-  if (error) {
-    console.error('Error updating channel:', error)
+    if (error) {
+      console.error('❌ Error updating channel:', error)
+      throw error
+    }
+
+    return data as Channel
+  } catch (error) {
+    console.error('❌ Exception in updateChannel:', error)
     throw error
   }
-
-  return data as Channel
 }
 
 /**
- * Delete a channel (cascade deletes all sub-channels)
+ * Delete a channel
  */
-export async function deleteChannel(channelId: string) {
-  const { error } = await supabase
-    .from('channels')
-    .delete()
-    .eq('id', channelId)
+export async function deleteChannel(channelId: string): Promise<void> {
+  try {
+    // Verify ownership first for better error message
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: channelToCheck } = await supabase
+        .from('channels')
+        .select('creator_id')
+        .eq('id', channelId)
+        .single()
 
-  if (error) {
-    console.error('Error deleting channel:', error)
+      if (channelToCheck && channelToCheck.creator_id !== user.id) {
+        console.error(`❌ [CHANNELS] Delete blocked: User ${user.id} is not owner of ${channelId} (Owner: ${channelToCheck.creator_id})`)
+        throw new Error('You are not the owner of this channel')
+      }
+    }
+
+    const { error, count } = await supabase
+      .from('channels')
+      .delete({ count: 'exact' })
+      .eq('id', channelId)
+
+    if (error) {
+      console.error('❌ Error deleting channel:', error)
+      throw error
+    }
+
+    if (count === 0) {
+      throw new Error('Channel not found or permission denied (must be owner)')
+    }
+    console.log('✅ [CHANNELS] Successfully deleted channel. Rows affected:', count)
+  } catch (error) {
+    console.error('❌ Exception in deleteChannel:', error)
     throw error
   }
 }
@@ -126,23 +205,27 @@ export async function addChannelMember(
   channelId: string,
   userId: string,
   role: 'owner' | 'moderator' | 'member' = 'member'
-) {
-  const { data, error } = await supabase
-    .from('channel_members')
-    .insert({
-      channel_id: channelId,
-      user_id: userId,
-      role,
-    })
-    .select()
-    .single()
+): Promise<any> {
+  try {
+    const { data, error } = await supabase
+      .from('channel_members')
+      .insert({
+        channel_id: channelId,
+        user_id: userId,
+        role,
+      })
+      .select()
+      .single()
 
-  if (error) {
-    console.error('Error adding channel member:', error)
-    throw error
+    if (error && !error.message.includes('duplicate')) {
+      console.error('❌ Error adding channel member:', error)
+      throw error
+    }
+
+    return data
+  } catch (error) {
+    console.error('❌ Exception in addChannelMember:', error)
   }
-
-  return data
 }
 
 /**
@@ -151,15 +234,20 @@ export async function addChannelMember(
 export async function removeChannelMember(
   channelId: string,
   userId: string
-) {
-  const { error } = await supabase
-    .from('channel_members')
-    .delete()
-    .eq('channel_id', channelId)
-    .eq('user_id', userId)
+): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('channel_members')
+      .delete()
+      .eq('channel_id', channelId)
+      .eq('user_id', userId)
 
-  if (error) {
-    console.error('Error removing channel member:', error)
+    if (error) {
+      console.error('❌ Error removing channel member:', error)
+      throw error
+    }
+  } catch (error) {
+    console.error('❌ Exception in removeChannelMember:', error)
     throw error
   }
 }
@@ -167,18 +255,23 @@ export async function removeChannelMember(
 /**
  * Get all members of a channel
  */
-export async function getChannelMembers(channelId: string) {
-  const { data, error } = await supabase
-    .from('channel_members')
-    .select('*, profiles(*)')
-    .eq('channel_id', channelId)
+export async function getChannelMembers(channelId: string): Promise<any> {
+  try {
+    const { data, error } = await supabase
+      .from('channel_members')
+      .select('*, users(*)')
+      .eq('channel_id', channelId)
 
-  if (error) {
-    console.error('Error fetching channel members:', error)
+    if (error) {
+      console.error('❌ Error fetching channel members:', error)
+      throw error
+    }
+
+    return data
+  } catch (error) {
+    console.error('❌ Exception in getChannelMembers:', error)
     throw error
   }
-
-  return data
 }
 
 /**
@@ -188,30 +281,39 @@ export async function isUserChannelMember(
   channelId: string,
   userId: string
 ): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('channel_members')
-    .select('id')
-    .eq('channel_id', channelId)
-    .eq('user_id', userId)
-    .single()
+  try {
+    const { data, error } = await supabase
+      .from('channel_members')
+      .select('id')
+      .eq('channel_id', channelId)
+      .eq('user_id', userId)
+      .single()
 
-  return !error && !!data
+    return !error && !!data
+  } catch (error) {
+    return false
+  }
 }
 
 /**
  * Get a single channel by ID
  */
-export async function getChannelById(channelId: string) {
-  const { data, error } = await supabase
-    .from('channels')
-    .select('*')
-    .eq('id', channelId)
-    .single()
+export async function getChannelById(channelId: string): Promise<Channel> {
+  try {
+    const { data, error } = await supabase
+      .from('channels')
+      .select('*')
+      .eq('id', channelId)
+      .single()
 
-  if (error) {
-    console.error('Error fetching channel:', error)
+    if (error) {
+      console.error('❌ Error fetching channel:', error)
+      throw error
+    }
+
+    return data as Channel
+  } catch (error) {
+    console.error('❌ Exception in getChannelById:', error)
     throw error
   }
-
-  return data as Channel
 }

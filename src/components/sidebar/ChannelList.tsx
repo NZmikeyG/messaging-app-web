@@ -2,7 +2,7 @@
 
 import React from 'react';
 import ChannelItem from './ChannelItem';
-import { ChannelHierarchy } from '@/lib/types';
+import { ChannelHierarchy } from '@/types';
 
 interface ChannelListProps {
   channels: ChannelHierarchy[];

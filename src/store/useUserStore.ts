@@ -12,6 +12,7 @@ interface UserStore {
 
   setProfile: (profile: Profile) => void
   updateProfile: (updates: Partial<Profile>) => void
+  fetchProfile: (userId: string) => Promise<void> // Add this
   setPresence: (presence: UserPresence) => void
   setIsLoading: (loading: boolean) => void
   setError: (error: string | null) => void
@@ -35,6 +36,29 @@ export const useUserStore = create<UserStore>()(
             : null,
           error: null,
         })),
+
+      fetchProfile: async (userId: string) => {
+        try {
+          // Dynamic import to avoid circular dependency
+          const { getUserById } = await import('@/lib/supabase/users')
+          const profile = await getUserById(userId)
+
+          if (profile) {
+            set((state) => ({
+              profile: {
+                ...profile,
+                // Preserve status if the fetch returned offline but we think we are online? 
+                // Actually getUserById fetches status from presence, so it should be accurate-ish.
+                // But let's trust the fetch.
+              },
+              error: null
+            }))
+          }
+        } catch (e) {
+          console.error('❌ Error fetching profile in store:', e)
+          set({ error: 'Failed to refresh profile' })
+        }
+      },
 
       setPresence: (presence) => set({ presence }),
 

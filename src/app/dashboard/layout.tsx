@@ -110,23 +110,28 @@ export default function DashboardLayout({
         activeChannelId={activeChannelId}
         onChannelSelect={handleChannelSelect}
         onCreateChannel={handleCreateChannel}
-        onNewMessage={() => {}}
+        onNewMessage={() => { }}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Debug info - remove in production */}
-        <div className="bg-gray-800 border-b border-gray-700 px-4 py-2 text-xs text-gray-400">
-          <span>
-            User: {userEmail || profile?.username || 'User'}
-          </span>
-          <span className="mx-2">•</span>
-          <span>Presence: {presenceList.length} users online</span>
-          <span className="mx-2">•</span>
-          <span>
-            Your status:{' '}
-            {presenceList.find((p) => p.user_id === userId)?.is_online
-              ? '🟢 Online'
-              : '🔴 Offline'}
-          </span>
+        <div className="bg-gray-800 border-b border-gray-700 px-4 py-2 text-xs text-gray-400 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span>
+              User: <span className="text-white">{profile?.username || userEmail || 'User'}</span>
+            </span>
+            <span className="text-gray-600">|</span>
+            <span>
+              Status: <span className={`${(profile?.status === 'online' || !profile?.status) ? 'text-green-400' :
+                profile?.status === 'busy' ? 'text-red-400' :
+                  profile?.status === 'offline' ? 'text-gray-500' : 'text-yellow-400'
+                }`}>
+                {profile?.status ? (profile.status.charAt(0).toUpperCase() + profile.status.slice(1)).replace('_', ' ') : 'Online'}
+              </span>
+            </span>
+          </div>
+          <div>
+            {presenceList.length} users connected
+          </div>
         </div>
 
         {/* Main content */}
