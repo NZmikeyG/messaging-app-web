@@ -56,6 +56,7 @@ export interface Message {
   edited_at?: string | null
   deleted: boolean
   sender_timezone?: string
+  parent_id?: string | null
   user?: {
     id: string
     email: string
