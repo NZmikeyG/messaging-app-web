@@ -140,30 +140,64 @@ export const MessageItem: React.FC<MessageItemProps> = ({
         )}
 
         {/* Action Row (Bottom) */}
+        {/* Action Row (Bottom) */}
         {!isEditing && (
-          <div className="flex items-center gap-4 mt-1 opacity-100 transition-opacity"> {/* Always visible or hover? Reddit makes them persistent usually, or dims them. keeping persistent for utility */}
+          <div className="flex items-center gap-4 mt-1 opacity-100 transition-opacity relative">
             <button
               onClick={() => onReply && onReply(message)}
               className="flex items-center gap-1 text-gray-500 hover:text-gray-300 text-xs font-bold transition-colors"
             >
-              <span className="text-lg leading-none">💬</span> Reply
-            </button>
-
-            {/* Like / React */}
-            <button
-              onClick={() => onAddReaction && onAddReaction(message.id, '👍')} // Default quick react
-              className="flex items-center gap-1 text-gray-500 hover:text-gray-300 text-xs font-bold transition-colors"
-            >
-              <span className="text-lg leading-none">⬆️</span> React
+              Reply
             </button>
 
             {/* More Actions (Edit/Delete) - Only if Own */}
             {isOwn && (
               <>
                 <button onClick={() => setIsEditing(true)} className="text-gray-500 hover:text-gray-300 text-xs font-bold">Edit</button>
-                <button onClick={handleDelete} className="text-gray-500 hover:text-red-400 text-xs font-bold">Delete</button>
+                <button
+                  onClick={() => {
+                    if (window.confirm('Delete this message?')) {
+                      onDeleteMessage?.(message.id);
+                    }
+                  }}
+                  className="text-gray-500 hover:text-red-400 text-xs font-bold"
+                >
+                  Delete
+                </button>
               </>
             )}
+
+            {/* React Button (Moved to end, refined) */}
+            <div className="relative">
+              <button
+                onClick={() => setShowPicker(!showPicker)}
+                className={`flex items-center justify-center w-6 h-6 rounded-full hover:bg-gray-800 transition-colors ${showPicker ? 'text-gray-300 bg-gray-800' : 'text-gray-500'}`}
+                title="Add Reaction"
+              >
+                <span className="text-lg grayscale hover:grayscale-0 transition-all">😀</span>
+              </button>
+
+              {/* Emoji Picker Popover */}
+              {showPicker && (
+                <div className="absolute bottom-full left-0 mb-2 z-50 bg-gray-900 border border-gray-700 rounded-xl shadow-xl p-2 flex gap-2 items-center min-w-[280px]">
+                  {['👍', '❤️', '😂', '😮', '😢', '😡'].map(emoji => (
+                    <button
+                      key={emoji}
+                      onClick={() => { onAddReaction?.(message.id, emoji); setShowPicker(false); }}
+                      className="p-2 hover:bg-gray-700 rounded-lg text-xl transition-transform hover:scale-110"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => { /* Open full picker if needed, for now just + */ }}
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
