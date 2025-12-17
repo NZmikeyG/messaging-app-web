@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react'
-import { useMessageStore } from '@/store/messageStore'
+// import { useMessageStore } from '@/store/messageStore'
+import { useUserStore } from '@/store/useUserStore'
 import type { Message, MessageReaction } from '@/types'
 
 interface EmojiReactionsProps {
@@ -19,9 +20,10 @@ export const EmojiReactions: React.FC<EmojiReactionsProps> = ({
   onAddReaction,
   onRemoveReaction,
 }) => {
-  const [showPicker, setShowPicker] = useState(false)
-  const { getReactionsForMessage } = useMessageStore()
-  const reactions = propReactions || getReactionsForMessage(message.id)
+  const { profile: currentUserProfile } = useUserStore()
+
+  // Use props if available (realtime), otherwise use empty array (store logic removed for simplicity as page handles data)
+  const reactions = propReactions || []
 
   // Group reactions by emoji and count them
   const groupedReactions = reactions.reduce(
@@ -39,58 +41,29 @@ export const EmojiReactions: React.FC<EmojiReactionsProps> = ({
     async (emoji: string) => {
       if (onAddReaction) {
         await onAddReaction(message.id, emoji)
-        setShowPicker(false)
       }
     },
     [message.id, onAddReaction]
   )
 
-  const handleRemoveReaction = useCallback(
-    async (reaction: MessageReaction) => {
-      if (onRemoveReaction) {
-        await onRemoveReaction(reaction.id)
-      }
-    },
-    [onRemoveReaction]
-  )
-
   return (
     <div className="flex flex-wrap gap-1 mt-2">
-      {Object.entries(groupedReactions).map(([emoji, emojiReactions]) => (
-        <button
-          key={emoji}
-          onClick={() => handleRemoveReaction(emojiReactions[0])}
-          className="px-2 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-sm flex items-center gap-1 text-gray-900"
-        >
-          <span>{emoji}</span>
-          <span className="text-xs text-gray-600">{emojiReactions.length}</span>
-        </button>
-      ))}
-
-      {onAddReaction && (
-        <div className="relative">
+      {Object.entries(groupedReactions).map(([emoji, emojiReactions]) => {
+        const hasReacted = emojiReactions.some(r => r.user_id === currentUserProfile?.id)
+        return (
           <button
-            onClick={() => setShowPicker(!showPicker)}
-            className="px-2 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-sm"
+            key={emoji}
+            onClick={() => handleAddReaction(emoji)}
+            className={`px-2 py-1 rounded-full text-sm flex items-center gap-1 transition-colors ${hasReacted
+              ? 'bg-blue-900/40 text-blue-200 border border-blue-700/50 hover:bg-blue-900/60'
+              : 'bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700'
+              }`}
           >
-            +
+            <span>{emoji}</span>
+            <span className={`text-xs ${hasReacted ? 'text-blue-100' : 'opacity-70'}`}>{emojiReactions.length}</span>
           </button>
-
-          {showPicker && (
-            <div className="absolute bottom-full right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg p-2 flex gap-1 z-10">
-              {EMOJI_REACTIONS.map((emoji) => (
-                <button
-                  key={emoji}
-                  onClick={() => handleAddReaction(emoji)}
-                  className="text-xl hover:bg-gray-100 rounded p-1 text-gray-900"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+        )
+      })}
     </div>
   )
 }

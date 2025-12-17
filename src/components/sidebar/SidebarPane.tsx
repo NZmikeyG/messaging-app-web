@@ -3,7 +3,7 @@ import React from 'react'
 import { useRouter } from 'next/navigation'
 
 interface SidebarPaneProps {
-    title: string
+    title: React.ReactNode
     children: React.ReactNode
     headerAction?: React.ReactNode
 }

@@ -14,7 +14,7 @@ export async function getChannelHierarchy(
 
     // Try RPC first
     const { data, error } = await supabase.rpc('get_channel_hierarchy', {
-      workspace_id_param: workspaceId,
+      p_workspace_id: workspaceId,
     })
 
     // Helper to build tree from flat list

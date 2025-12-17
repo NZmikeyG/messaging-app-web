@@ -15,8 +15,9 @@ interface MessageItemProps {
   onDeleteMessage?: (messageId: string) => Promise<void>
   onAddReaction?: (messageId: string, emoji: string) => Promise<void>
   onRemoveReaction?: (reactionId: string) => Promise<void>
-  onReply?: (message: Message) => void // New
-  currentUserId?: string // New
+  onReply?: (message: Message) => void
+  currentUserId?: string
+  onUserClick?: (user: { id: string, username: string, avatar_url?: string | null }) => void // Updated signature
 }
 
 // --- REFACTOR START ---
@@ -29,6 +30,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   onRemoveReaction,
   onReply,
   currentUserId,
+  onUserClick
 }) => {
   const { profile: currentUserProfile } = useUserStore()
   const { getReactionsForMessage } = useMessageStore()
@@ -48,12 +50,6 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     }
   }
 
-  const handleDelete = async () => {
-    if (onDeleteMessage && window.confirm('Delete this message?')) {
-      await onDeleteMessage(message.id)
-    }
-  }
-
   // Resolve Avatar/Username
   let userAvatar = message.profiles?.avatar_url
   let username = message.profiles?.username
@@ -62,6 +58,17 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     username = username || currentUserProfile?.username
   }
   username = username || 'Unknown User'
+
+  const handleUserClick = () => {
+    console.log('👤 [UserClick] Clicked user:', message.user_id, username)
+    if (onUserClick && message.user_id) {
+      onUserClick({
+        id: message.user_id,
+        username: username || 'User',
+        avatar_url: userAvatar
+      })
+    }
+  }
 
   const isEdited = message.edited_at !== null && message.edited_at !== undefined
 
@@ -78,7 +85,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
       const diffHours = diffMs / (1000 * 60 * 60)
 
       if (diffHours < 24) {
-        setTimeString(dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })) // e.g., "10:30 AM"
+        setTimeString(dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))
       } else {
         setTimeString(dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))
       }
@@ -88,13 +95,16 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 
   return (
     <div
-      className="flex gap-2 group relative mb-2" // Reduced gap, margin bottom
+      className="flex gap-2 group relative mb-2"
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => { setIsHovering(false); setShowPicker(false); }}
     >
       {/* Left Column: Avatar */}
       <div className="shrink-0 flex flex-col items-center">
-        <div className="w-8 h-8 rounded-full overflow-hidden mt-1 cursor-pointer hover:ring-2 hover:ring-gray-500 transition-all shadow-sm relative">
+        <div
+          onClick={handleUserClick}
+          className="w-8 h-8 rounded-full overflow-hidden mt-1 cursor-pointer hover:ring-2 hover:ring-purple-500 transition-all shadow-sm relative"
+        >
           {userAvatar ? (
             <Image
               src={userAvatar}
@@ -115,7 +125,12 @@ export const MessageItem: React.FC<MessageItemProps> = ({
       <div className="flex-1 min-w-0">
         {/* Header: Name • Time */}
         <div className="flex items-center gap-2 text-xs mb-0.5">
-          <span className="font-bold text-gray-300 hover:underline cursor-pointer">{username}</span>
+          <span
+            onClick={handleUserClick}
+            className="font-bold text-gray-300 hover:underline cursor-pointer hover:text-purple-400"
+          >
+            {username}
+          </span>
           <span className="text-gray-500 text-[10px]">{timeString}</span>
           {isEdited && <span className="text-gray-600 italic text-[10px]">(edited)</span>}
         </div>
@@ -140,7 +155,6 @@ export const MessageItem: React.FC<MessageItemProps> = ({
         )}
 
         {/* Action Row (Bottom) */}
-        {/* Action Row (Bottom) */}
         {!isEditing && (
           <div className="flex items-center gap-4 mt-1 opacity-100 transition-opacity relative">
             <button
@@ -155,9 +169,15 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               <>
                 <button onClick={() => setIsEditing(true)} className="text-gray-500 hover:text-gray-300 text-xs font-bold">Edit</button>
                 <button
-                  onClick={() => {
-                    if (window.confirm('Delete this message?')) {
-                      onDeleteMessage?.(message.id);
+                  onClick={async () => {
+                    if (onDeleteMessage) {
+                      try {
+                        await onDeleteMessage(message.id)
+                      } catch (err) {
+                        console.error('❌ [DELETE] Error in handler:', err)
+                      }
+                    } else {
+                      console.error('❌ [DELETE] Handler missing!')
                     }
                   }}
                   className="text-gray-500 hover:text-red-400 text-xs font-bold"
@@ -167,7 +187,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               </>
             )}
 
-            {/* React Button (Moved to end, refined) */}
+            {/* React Button (Moved to end) */}
             <div className="relative">
               <button
                 onClick={() => setShowPicker(!showPicker)}
@@ -177,25 +197,11 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 <span className="text-lg grayscale hover:grayscale-0 transition-all">😀</span>
               </button>
 
-              {/* Emoji Picker Popover */}
+              {/* FULL Emoji Picker Popover */}
               {showPicker && (
-                <div className="absolute bottom-full left-0 mb-2 z-50 bg-gray-900 border border-gray-700 rounded-xl shadow-xl p-2 flex gap-2 items-center min-w-[280px]">
-                  {['👍', '❤️', '😂', '😮', '😢', '😡'].map(emoji => (
-                    <button
-                      key={emoji}
-                      onClick={() => { onAddReaction?.(message.id, emoji); setShowPicker(false); }}
-                      className="p-2 hover:bg-gray-700 rounded-lg text-xl transition-transform hover:scale-110"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => { /* Open full picker if needed, for now just + */ }}
-                    className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
-                  >
-                    +
-                  </button>
-                </div>
+                <EmojiPickerPopover
+                  onSelect={(emoji) => { onAddReaction?.(message.id, emoji); setShowPicker(false); }}
+                />
               )}
             </div>
           </div>
@@ -213,6 +219,40 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+const EmojiPickerPopover = ({ onSelect }: { onSelect: (emoji: string) => void }) => {
+  const [expanded, setExpanded] = useState(false)
+  const emojisToShow = expanded ? EMOJI_LIST : COMMON_EMOJIS
+
+  return (
+    <div className={`absolute bottom-full left-0 mb-2 z-50 bg-gray-900 border border-gray-700 rounded-xl shadow-xl p-3 gap-2 ${expanded
+      ? 'grid grid-cols-6 w-[280px] h-[200px] overflow-y-auto'
+      : 'flex flex-row items-center whitespace-nowrap'
+      }`}>
+      {emojisToShow.map(emoji => (
+        <button
+          key={emoji}
+          onClick={(e) => {
+            e.stopPropagation()
+            onSelect(emoji)
+          }}
+          className="p-1 hover:bg-gray-700 rounded text-xl flex items-center justify-center transition-transform hover:scale-110"
+        >
+          {emoji}
+        </button>
+      ))}
+      {!expanded && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setExpanded(true); }}
+          className="p-1 hover:bg-gray-700 rounded text-sm text-gray-400 font-bold flex items-center justify-center border border-gray-600 ml-1"
+          title="More Emojis"
+        >
+          +
+        </button>
+      )}
     </div>
   )
 }

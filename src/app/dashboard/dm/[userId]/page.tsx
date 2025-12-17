@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useRef } from 'react'
-import Image from 'next/image' // Added Image import
+import Image from 'next/image'
 import { useParams } from 'next/navigation'
 import { useUserStore } from '@/store/useUserStore'
 import {
@@ -23,8 +23,6 @@ import type { Profile } from '@/types'
 
 import { EMOJI_LIST, COMMON_EMOJIS } from '@/constants/emojis'
 
-// ... (remove local COMMON_EMOJIS)
-
 export default function DMConversation() {
   const params = useParams()
   const { profile: currentUser } = useUserStore()
@@ -33,7 +31,6 @@ export default function DMConversation() {
   const [messages, setMessages] = useState<DirectMessage[]>([])
   const [otherUser, setOtherUser] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [messageContent, setMessageContent] = useState('')
   const [sending, setSending] = useState(false)
 
@@ -129,12 +126,13 @@ export default function DMConversation() {
   }
 
   const handleDeleteMessage = async (messageId: string) => {
-    if (!confirm('Delete this message?')) return
+    // Removed confirm for consistency with main chat
     try {
       await deleteDirectMessage(messageId)
       setMessages(prev => prev.filter(m => m.id !== messageId))
       setShowMessageMenu(null)
     } catch (err) {
+      console.error('Failed to delete DM:', err)
       alert('Failed to delete')
     }
   }
@@ -191,7 +189,7 @@ export default function DMConversation() {
       <div className="border-b border-neutral-800 bg-neutral-800 p-4 shrink-0 flex justify-between items-center">
         <div>
           <h2 className="font-bold text-lg">{otherUser?.username || 'User'}</h2>
-          <div className={`text - xs ${recipientPresence?.is_online ? 'text-green-400' : 'text-gray-400'} `}>
+          <div className={`text-xs ${recipientPresence?.is_online ? 'text-green-400' : 'text-gray-400'}`}>
             {recipientPresence?.is_online ? '● Online' : '● Offline'}
           </div>
         </div>
@@ -206,7 +204,7 @@ export default function DMConversation() {
           return (
             <div
               key={msg.id}
-              className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group relative items - end`}
+              className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group relative items-end`}
               onMouseEnter={() => {
                 if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current)
                 setHoveredMessageId(msg.id)
@@ -224,7 +222,7 @@ export default function DMConversation() {
                     fill
                     sizes="32px"
                   />
-                </div >
+                </div>
               )}
 
               <div className="max-w-[70%]">
@@ -243,9 +241,9 @@ export default function DMConversation() {
                   </form>
                 ) : (
                   <div className={`
-                                 px-4 py-2 rounded-2xl relative
-                                 ${isOwn ? 'bg-purple-600 rounded-br-none' : 'bg-neutral-800 rounded-bl-none'}
-                             `}>
+                        px-4 py-2 rounded-2xl relative
+                        ${isOwn ? 'bg-purple-600 rounded-br-none' : 'bg-neutral-800 rounded-bl-none'}
+                      `}>
                     <p className="whitespace-pre-wrap word-break">{msg.content}</p>
                     <div className="text-[10px] opacity-70 flex justify-end gap-1 mt-1">
                       {(() => {
@@ -266,8 +264,8 @@ export default function DMConversation() {
                             key={emoji}
                             onClick={() => handleReaction(msg.id, emoji)}
                             className={`px-1.5 py-0.5 rounded-full text-xs flex items-center gap-1 border
-                                                              ${users.includes(currentUser?.id || '') ? 'bg-purple-500/20 border-purple-500/50' : 'bg-neutral-700/50 border-transparent'}
-                                                          `}
+                              ${users.includes(currentUser?.id || '') ? 'bg-purple-500/20 border-purple-500/50' : 'bg-neutral-700/50 border-transparent'}
+                            `}
                           >
                             <span>{emoji}</span>
                             <span className="opacity-70">{users.length}</span>
@@ -279,47 +277,42 @@ export default function DMConversation() {
                 )}
               </div>
 
-              {
-                isOwn && (
-                  <div className="relative w-8 h-8 shrink-0 ml-2 mb-1">
-                    <Image
-                      src={currentUser?.avatar_url || `https://ui-avatars.com/api/?name=${currentUser?.username || 'User'}&background=random`}
-                      alt={currentUser?.username || 'User'}
-                      className="rounded-full object-cover"
-                      fill
-                      sizes="32px"
-                    />
-                  </div>
-                )
-              }
-
+              {isOwn && (
+                <div className="relative w-8 h-8 shrink-0 ml-2 mb-1">
+                  <Image
+                    src={currentUser?.avatar_url || `https://ui-avatars.com/api/?name=${currentUser?.username || 'User'}&background=random`}
+                    alt={currentUser?.username || 'User'}
+                    className="rounded-full object-cover"
+                    fill
+                    sizes="32px"
+                  />
+                </div>
+              )}
 
               {/* Action Button - Adjusted Positioning */}
-              {
-                hoveredMessageId === msg.id && !isEditing && (
-                  <div className={`flex items-center mx-2 ${isOwn ? 'order-first' : 'order-last'}`}>
-                    <button
-                      onClick={(e) => {
-                        const rect = e.currentTarget.getBoundingClientRect()
-                        setShowMessageMenu(msg.id)
-                        setMenuPos({ x: rect.left, y: rect.top })
-                        setShowAllEmojis(false)
-                      }}
-                      className="w-8 h-8 flex items-center justify-center bg-neutral-800 hover:bg-neutral-700 rounded-full border border-gray-700 text-gray-400 hover:text-white shadow-lg"
-                    >
-                      ⋯
-                    </button>
-                  </div>
-                )
-              }
-            </div >
+              {hoveredMessageId === msg.id && !isEditing && (
+                <div className={`flex items-center mx-2 ${isOwn ? 'order-first' : 'order-last'}`}>
+                  <button
+                    onClick={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      setShowMessageMenu(msg.id)
+                      setMenuPos({ x: rect.left, y: rect.top })
+                      setShowAllEmojis(false)
+                    }}
+                    className="w-8 h-8 flex items-center justify-center bg-neutral-800 hover:bg-neutral-700 rounded-full border border-gray-700 text-gray-400 hover:text-white shadow-lg"
+                  >
+                    ⋯
+                  </button>
+                </div>
+              )}
+            </div>
           )
         })}
         <div ref={messagesEndRef} />
-      </div >
+      </div>
 
       {/* Input */}
-      < form onSubmit={handleSendMessage} className="p-4 bg-neutral-800 border-t border-neutral-700 flex gap-2" >
+      <form onSubmit={handleSendMessage} className="p-4 bg-neutral-800 border-t border-neutral-700 flex gap-2">
         <input
           value={messageContent}
           onChange={e => setMessageContent(e.target.value)}
@@ -329,91 +322,89 @@ export default function DMConversation() {
         <button type="submit" disabled={!messageContent.trim() || sending} className="bg-purple-600 px-4 py-2 rounded font-bold hover:bg-purple-700 disabled:opacity-50">
           Send
         </button>
-      </form >
+      </form>
 
       {/* Context Menu */}
-      {
-        showMessageMenu && menuPos && (
-          <div
-            data-message-menu
-            className={`fixed z-50 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-[160px]`}
-            style={{
-              top: menuPos.y,
-              // If it's my message (right side), align right edge of menu to button?
-              // Or just ensure it doesn't overflow right.
-              // Logic: If x > windowWidth / 2, align right.
-              left: menuPos.x > (typeof window !== 'undefined' ? window.innerWidth / 2 : 0) ? undefined : menuPos.x,
-              right: menuPos.x > (typeof window !== 'undefined' ? window.innerWidth / 2 : 0) ? (typeof window !== 'undefined' ? window.innerWidth - menuPos.x - 32 : 0) : undefined
-            }}
-          >
-            {/* Quick Reactions */}
-            <div className="p-2 border-b border-neutral-700">
-              {!showAllEmojis ? (
-                <div className="flex gap-1 justify-between items-center">
-                  {COMMON_EMOJIS.slice(0, 5).map(emoji => (
-                    <button
-                      key={emoji}
-                      onClick={() => handleReaction(showMessageMenu, emoji)}
-                      className="hover:bg-neutral-700 p-1 rounded text-lg w-8 h-8 flex items-center justify-center"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setShowAllEmojis(true); }}
-                    className="hover:bg-neutral-700 p-1 rounded text-gray-400 w-8 h-8 flex items-center justify-center text-xs bg-neutral-900 border border-neutral-700"
-                  >
-                    +
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-5 gap-1 mb-2">
-                  {EMOJI_LIST.map(emoji => (
-                    <button
-                      key={emoji}
-                      onClick={() => handleReaction(showMessageMenu, emoji)}
-                      className="hover:bg-neutral-700 p-1 rounded text-lg flex justify-center"
-                    >
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+      {showMessageMenu && menuPos && (
+        <div
+          data-message-menu
+          className="fixed z-50 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-[160px]"
+          style={{
+            // Vertical positioning: if close to bottom, show above
+            top: menuPos.y > (typeof window !== 'undefined' ? window.innerHeight - 300 : 0) ? undefined : menuPos.y,
+            bottom: menuPos.y > (typeof window !== 'undefined' ? window.innerHeight - 300 : 0) ? (typeof window !== 'undefined' ? window.innerHeight - menuPos.y : 0) : undefined,
 
-            {/* Actions */}
-            <div className="flex flex-col py-1">
-              <button onClick={() => openForwardModal(messages.find(m => m.id === showMessageMenu)?.content || '')} className="px-4 py-2 text-left hover:bg-neutral-700 text-sm">
-                ↗️ Forward
-              </button>
-              {
-                messages.find(m => m.id === showMessageMenu)?.sender_id === currentUser?.id && (
-                  <>
-                    <button onClick={() => {
-                      const msg = messages.find(m => m.id === showMessageMenu)
-                      if (msg) {
-                        setEditingMessageId(msg.id)
-                        setEditContent(msg.content)
-                        setShowMessageMenu(null)
-                      }
-                    }} className="px-4 py-2 text-left hover:bg-neutral-700 text-sm">
-                      ✏️ Edit
-                    </button>
-                    <button onClick={() => handleDeleteMessage(showMessageMenu)} className="px-4 py-2 text-left hover:bg-red-900/50 text-red-500 text-sm">
-                      🗑️ Delete
-                    </button>
-                  </>
-                )
-              }
-            </div>
+            // Horizontal positioning
+            left: menuPos.x > (typeof window !== 'undefined' ? window.innerWidth / 2 : 0) ? undefined : menuPos.x,
+            right: menuPos.x > (typeof window !== 'undefined' ? window.innerWidth / 2 : 0) ? (typeof window !== 'undefined' ? window.innerWidth - menuPos.x - 32 : 0) : undefined
+          }}
+        >
+          {/* Quick Reactions */}
+          <div className="p-2 border-b border-neutral-700">
+            {!showAllEmojis ? (
+              <div className="flex gap-1 justify-between items-center">
+                {COMMON_EMOJIS.slice(0, 5).map(emoji => (
+                  <button
+                    key={emoji}
+                    onClick={() => handleReaction(showMessageMenu, emoji)}
+                    className="hover:bg-neutral-700 p-1 rounded text-lg w-8 h-8 flex items-center justify-center"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowAllEmojis(true); }}
+                  className="hover:bg-neutral-700 p-1 rounded text-gray-400 w-8 h-8 flex items-center justify-center text-xs bg-neutral-900 border border-neutral-700"
+                >
+                  +
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-5 gap-1 mb-2">
+                {EMOJI_LIST.map(emoji => (
+                  <button
+                    key={emoji}
+                    onClick={() => handleReaction(showMessageMenu, emoji)}
+                    className="hover:bg-neutral-700 p-1 rounded text-lg flex justify-center"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        )
-      }
+
+          {/* Actions */}
+          <div className="flex flex-col py-1">
+            <button onClick={() => openForwardModal(messages.find(m => m.id === showMessageMenu)?.content || '')} className="px-4 py-2 text-left hover:bg-neutral-700 text-sm">
+              ↗️ Forward
+            </button>
+            {messages.find(m => m.id === showMessageMenu)?.sender_id === currentUser?.id && (
+              <>
+                <button onClick={() => {
+                  const msg = messages.find(m => m.id === showMessageMenu)
+                  if (msg) {
+                    setEditingMessageId(msg.id)
+                    setEditContent(msg.content)
+                    setShowMessageMenu(null)
+                  }
+                }} className="px-4 py-2 text-left hover:bg-neutral-700 text-sm">
+                  ✏️ Edit
+                </button>
+                <button onClick={() => handleDeleteMessage(showMessageMenu)} className="px-4 py-2 text-left hover:bg-red-900/50 text-red-500 text-sm">
+                  🗑️ Delete
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <ForwardMessageModal
         isOpen={isForwardOpen}
         onClose={() => setIsForwardOpen(false)}
         content={forwardContent}
       />
-    </div >
+    </div>
   )
 }

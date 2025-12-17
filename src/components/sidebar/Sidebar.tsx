@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   getChannelHierarchy,
   createChannel,
@@ -207,7 +208,11 @@ export default function Sidebar({
 
   const renderChannelsContent = () => (
     <SidebarPane
-      title="Channels"
+      title={
+        <Link href="/dashboard/channels" className="hover:text-gray-300 transition-colors">
+          Channels
+        </Link>
+      }
       headerAction={
         <button
           onClick={() => handleOpenCreateChannel(null)}
@@ -269,7 +274,11 @@ export default function Sidebar({
 
   const renderDMsContent = () => (
     <SidebarPane
-      title="Chat"
+      title={
+        <Link href="/dashboard/dm" className="hover:text-gray-300 transition-colors">
+          Chat
+        </Link>
+      }
       headerAction={
         <button
           onClick={() => setIsNewMessageOpen(true)}

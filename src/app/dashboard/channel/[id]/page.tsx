@@ -7,6 +7,7 @@ import { useParams } from 'next/navigation'
 import { useUserStore } from '@/store/useUserStore'
 import { supabase } from '@/lib/supabase/client'
 import { MessageItem } from '@/components/Messages/MessageItem'
+import { UserDMPopover } from '@/components/UserDMPopover'
 import { Message, MessageReaction } from '@/types'
 
 const DEFAULT_EMOJIS = ['👍', '😄', '🔥', '💯', '🙏', '🏀']
@@ -43,7 +44,8 @@ const MessageTree = ({
   onReply,
   replyingTo,
   onSendReply,
-  currentUserId
+  currentUserId,
+  onUserClick // New
 }: any) => {
   if (!nodes || nodes.length === 0) return null
 
@@ -59,6 +61,7 @@ const MessageTree = ({
             onAddReaction={onReact}
             onReply={onReply}
             currentUserId={currentUserId}
+            onUserClick={onUserClick}
           />
 
           {/* Reply Form */}
@@ -81,6 +84,7 @@ const MessageTree = ({
               replyingTo={replyingTo}
               onSendReply={onSendReply}
               currentUserId={currentUserId}
+              onUserClick={onUserClick}
             />
           )}
         </div>
@@ -140,8 +144,7 @@ export default function ChannelMessagesPage() {
   }, [channelId])
 
   // 2. Fetch Messages & Reactions
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const fetchMessages = async () => {
+  const fetchMessages = React.useCallback(async () => {
     // Fetch messages with profiles
     const { data, error } = await supabase
       .from('messages')
@@ -153,18 +156,46 @@ export default function ChannelMessagesPage() {
       setMessages(data as any)
 
       // Fetch reactions for these messages
-      const msgIds = (data as any[]).map((m: any) => m.id)
-      const { data: rxData } = await supabase.from('message_reactions').select('*').in('message_id', msgIds)
-      if (rxData) setReactions(rxData as any)
+      if (data.length > 0) {
+        const msgIds = (data as any[]).map((m: any) => m.id)
+        const { data: rxData } = await supabase.from('message_reactions').select('*').in('message_id', msgIds)
+        if (rxData) setReactions(rxData as any)
+      } else {
+        setReactions([])
+      }
     }
-  }
+  }, [channelId])
 
   useEffect(() => {
     fetchMessages()
-    // Polling or Realtime could go here
-    const interval = setInterval(fetchMessages, 3000)
-    return () => clearInterval(interval)
-  }, [channelId])
+
+    // 1. Realtime Subscription (Instant Updates)
+    const channel = supabase
+      .channel(`channel_${channelId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'messages', filter: `channel_id=eq.${channelId}` },
+        () => {
+          fetchMessages()
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'message_reactions' },
+        (payload: any) => {
+          fetchMessages()
+        }
+      )
+      .subscribe()
+
+    // 2. Safety Poll (Backup every 20s in case of connection drop)
+    const interval = setInterval(fetchMessages, 20000)
+
+    return () => {
+      supabase.removeChannel(channel)
+      clearInterval(interval)
+    }
+  }, [channelId, fetchMessages])
 
   // Scroll to bottom on load (only initially or if user is at bottom? Simplistic for now)
   // useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages.length])
@@ -194,20 +225,48 @@ export default function ChannelMessagesPage() {
   }
 
   const handleDelete = async (id: string) => {
-    await supabase.from('messages').delete().eq('id', id)
-    fetchMessages()
+    const { error } = await supabase.from('messages').delete().eq('id', id)
+
+    if (error) {
+      console.error('❌ [DELETE ERROR]', error)
+      alert(`Failed to delete message: ${error.message}`)
+    } else {
+      fetchMessages()
+    }
   }
 
   const handleToggleReaction = async (msgId: string, emoji: string) => {
     if (!userProfile?.id) return
-    // Check existing
-    const existing = reactions.find(r => r.message_id === msgId && r.user_id === userProfile.id && r.emoji === emoji)
-    if (existing) {
-      await supabase.from('message_reactions').delete().eq('id', existing.id)
+
+    // Find if user already has ANY reaction on this message
+    const existingReaction = reactions.find(r => r.message_id === msgId && r.user_id === userProfile.id)
+
+    if (existingReaction) {
+      if (existingReaction.emoji === emoji) {
+        // Toggle OFF if clicking same emoji
+        await supabase.from('message_reactions').delete().eq('id', existingReaction.id)
+      } else {
+        // REPLACE if clicking different emoji
+        // Delete old one first (or update, but delete+insert is cleaner for composite keys if unique constraint acts up)
+        await supabase.from('message_reactions').delete().eq('id', existingReaction.id)
+        await supabase.from('message_reactions').insert({ message_id: msgId, user_id: userProfile.id, emoji })
+      }
     } else {
+      // Add new
       await supabase.from('message_reactions').insert({ message_id: msgId, user_id: userProfile.id, emoji })
     }
     fetchMessages()
+  }
+
+  // DM Popover State
+  const [dmTargetUser, setDmTargetUser] = useState<{ id: string, username: string, avatar_url?: string | null } | null>(null)
+
+  const handleUserClick = (user: { id: string, username: string, avatar_url?: string | null }) => {
+    console.log('👀 [PAGE] User Clicked:', user)
+    // Open DM Popover
+    if (user.id !== userProfile?.id) {
+      setDmTargetUser(user)
+    }
   }
 
   // Derived Tree
@@ -215,6 +274,12 @@ export default function ChannelMessagesPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-black relative">
+      {/* DM Popover */}
+      <UserDMPopover
+        isOpen={!!dmTargetUser}
+        onClose={() => setDmTargetUser(null)}
+        targetUser={dmTargetUser}
+      />
       {/* Header */}
       <div className="sticky top-0 z-10 py-3 px-6 bg-black/95 backdrop-blur-sm border-b border-gray-800 flex justify-between items-center shadow-sm">
         <span className="text-lg font-bold text-white"># {channelInfo?.name || '...'}</span>
@@ -233,6 +298,7 @@ export default function ChannelMessagesPage() {
             replyingTo={replyingToId}
             onSendReply={handleSend}
             currentUserId={userProfile?.id}
+            onUserClick={handleUserClick}
           />
           <div ref={bottomRef} className="h-10" />
         </div>
