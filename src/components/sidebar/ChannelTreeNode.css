@@ -4,12 +4,12 @@
 
 .level-1 {
   margin-left: 8px;
-  border-left: 1px solid rgba(255, 255, 255, 0.05);
+  /* Removed border-left to keep visual inside parent bubble */
 }
 
 .level-2 {
   margin-left: 8px;
-  border-left: 1px solid rgba(255, 255, 255, 0.05);
+  /* Removed border-left */
 }
 
 .channel-item.level-1,

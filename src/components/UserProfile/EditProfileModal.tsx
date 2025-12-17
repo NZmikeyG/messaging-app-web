@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { updateUserProfile } from '@/lib/supabase/users'
 import { useUserStore } from '@/store/useUserStore'
 
@@ -92,7 +93,13 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
                         </div>
                         {avatarUrl && (
                             <div className="mt-2 flex justify-center">
-                                <img src={avatarUrl} alt="Preview" className="w-16 h-16 rounded-full border border-gray-200" />
+                                <Image
+                                    src={avatarUrl}
+                                    alt="Preview"
+                                    width={64} // Corresponds to w-16 (16 * 4 = 64px)
+                                    height={64} // Corresponds to h-16 (16 * 4 = 64px)
+                                    className="rounded-full border border-gray-200"
+                                />
                             </div>
                         )}
                     </div>

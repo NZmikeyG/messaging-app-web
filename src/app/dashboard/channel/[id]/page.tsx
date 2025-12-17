@@ -382,9 +382,10 @@ export default function ChannelMessagesPage() {
   const isOwnMessage = (messageUserId: string) => userProfile?.id === messageUserId
 
   return (
-    <div className="flex flex-col min-h-screen bg-black">
-      <div className="py-4 px-6 bg-black text-lg font-bold text-white border-b border-gray-700">
-        Channel: {channelInfo?.name ? channelInfo.name : channelId}
+    <div className="flex flex-col min-h-screen bg-black relative">
+      <div className="sticky top-0 z-10 py-4 px-6 bg-black/95 backdrop-blur-sm text-lg font-bold text-white border-b border-gray-700 shadow-sm">
+        <span className="text-gray-400 mr-2">#</span>
+        {channelInfo?.name ? channelInfo.name : 'Loading...'}
       </div>
       <div className="flex-1 px-4 py-4 overflow-y-auto" style={{ minHeight: 0 }}>
         <div className="space-y-3 flex flex-col">

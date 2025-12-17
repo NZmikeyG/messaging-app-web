@@ -157,12 +157,19 @@ export const usePresence = (userId: string | undefined) => {
  * CRITICAL FIX #2: Proper cleanup of subscriptions
  * Provides real-time updates via Supabase subscriptions
  */
+/**
+ * Hook to get and subscribe to all users' presence
+ * CRITICAL FIX #2: Proper cleanup of subscriptions
+ * Provides real-time updates via Supabase subscriptions
+ */
 export const useUserPresenceList = () => {
   const [presenceList, setPresenceList] = useState<UserPresence[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const subscriptionRef = useRef<RealtimeChannel | null>(null)
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Use a ref to track the current list to avoid closure staleness in callbacks if not using functional updates correctly (though we are)
+  // But more importantly, to debug.
 
   useEffect(() => {
     let isMounted = true
@@ -182,7 +189,6 @@ export const useUserPresenceList = () => {
           .order('last_seen', { ascending: false })
 
         if (fetchError) {
-          logPresenceError('[PRESENCE LIST] Fetch error', fetchError)
           throw fetchError
         }
 
@@ -195,15 +201,14 @@ export const useUserPresenceList = () => {
             'users online'
           )
           setPresenceList(typedData)
-          setError(null)
         }
       } catch (err) {
         const message =
           err instanceof Error ? err.message : 'Failed to fetch presence list'
         if (isMounted) {
+          console.error('❌ [PRESENCE LIST] Fetch failed', err)
           setError(message)
-          logPresenceError('[PRESENCE LIST] Fetch failed', err)
-          setPresenceList([])
+          // Don't clear list on error, keep stale data if any
         }
       } finally {
         if (isMounted) setLoading(false)
@@ -216,12 +221,13 @@ export const useUserPresenceList = () => {
     const setupSubscription = () => {
       console.log('📡 [PRESENCE LIST] Setting up subscription...')
 
+      // Remove existing if any
+      if (subscriptionRef.current) {
+        supabase.removeChannel(subscriptionRef.current)
+      }
+
       subscriptionRef.current = supabase
-        .channel('public:user_presence:real-time', {
-          config: {
-            broadcast: { self: true },
-          },
-        })
+        .channel('public:user_presence:list')
         .on(
           'postgres_changes',
           {
@@ -232,68 +238,44 @@ export const useUserPresenceList = () => {
           (payload: any) => {
             if (!isMounted) return
 
-            console.log('🔄 [PRESENCE LIST] Event:', payload.eventType)
+            console.log('🔄 [PRESENCE LIST] Event:', payload.eventType, payload.new?.user_id)
 
             const newData = payload.new as UserPresence
             const oldData = payload.old as UserPresence
 
             setPresenceList((prev) => {
-              if (
-                payload.eventType === 'INSERT' ||
-                payload.eventType === 'UPDATE'
-              ) {
+              if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                // If the user is online, add/update in list
                 if (newData.is_online) {
-                  // User is online - add or update
-                  const index = prev.findIndex(
-                    (p) => p.user_id === newData.user_id
-                  )
-                  if (index >= 0) {
-                    const updated = [...prev]
-                    updated[index] = newData
-                    return updated
+                  const exists = prev.some(p => p.user_id === newData.user_id)
+                  if (exists) {
+                    return prev.map(p => p.user_id === newData.user_id ? newData : p)
                   } else {
                     return [...prev, newData]
                   }
                 } else {
-                  // User went offline - remove
-                  return prev.filter((p) => p.user_id !== newData.user_id)
+                  // If user is now offline (is_online = false), remove from list
+                  return prev.filter(p => p.user_id !== newData.user_id)
                 }
               } else if (payload.eventType === 'DELETE') {
-                return prev.filter((p) => p.user_id !== oldData.user_id)
+                return prev.filter(p => p.user_id !== oldData.user_id)
               }
               return prev
             })
           }
         )
         .subscribe((status: string) => {
-          console.log('📡 [PRESENCE LIST] Subscription status:', status)
-          if (status === 'CLOSED') {
-            console.log(
-              '⚠️ [PRESENCE LIST] Subscription closed, reconnecting in 3s...'
-            )
-            if (reconnectTimeoutRef.current) {
-              clearTimeout(reconnectTimeoutRef.current)
-              reconnectTimeoutRef.current = null
-            }
-            reconnectTimeoutRef.current = setTimeout(setupSubscription, 3000)
-          } else if (status === 'SUBSCRIBED') {
-            console.log('✅ [PRESENCE LIST] Subscription active')
-          }
+          console.log('📡 [PRESENCE LIST] Status:', status)
         })
     }
 
     setupSubscription()
 
-    // CRITICAL FIX #2: Proper cleanup of subscriptions and timeouts
     return () => {
       isMounted = false
       if (subscriptionRef.current) {
-        subscriptionRef.current.unsubscribe()
+        supabase.removeChannel(subscriptionRef.current)
         subscriptionRef.current = null
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-        reconnectTimeoutRef.current = null
       }
     }
   }, [])

@@ -31,10 +31,27 @@ const ChannelTreeNode: React.FC<ChannelTreeNodeProps> = ({
   const hasChildren = node.children && node.children.length > 0
   const isSelected = selectedChannelId === node.id
 
+  // Initialize expansion state from localStorage or default to expanded
+  React.useEffect(() => {
+    if (hasChildren) {
+      const storedState = localStorage.getItem(`channel_expanded_${node.id}`)
+      // If no stored state, default to true (expanded). Otherwise parse stored string.
+      const shouldBeExpanded = storedState === null ? true : storedState === 'true'
+
+      // Sync with store if different
+      if (shouldBeExpanded !== isExpanded) {
+        toggleChannelExpanded(node.id)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id, hasChildren]) // Intentionally omitting toggleChannelExpanded/isExpanded to prevent toggle loops on sync
+
   const handleToggleExpand = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (hasChildren) {
+      const newState = !isExpanded
       toggleChannelExpanded(node.id)
+      localStorage.setItem(`channel_expanded_${node.id}`, String(newState))
     }
   }
 
@@ -44,63 +61,76 @@ const ChannelTreeNode: React.FC<ChannelTreeNodeProps> = ({
     onSelect?.(node.id)
   }
 
+  // "Bubble" styling for top-level channels
+  const bubbleClass = node.level === 0
+    ? "mb-2 border border-white/5 rounded-xl overflow-hidden bg-white/[0.02]"
+    : ""
+
   return (
-    <li
-      className={`channel-tree-node level-${node.level}`}
-      style={{ paddingLeft: `${node.level * 24}px` }} // Increased indentation
-    >
+    <li className={`channel-tree-node level-${node.level} ${bubbleClass}`}>
       <div
-        className={`channel-item group relative cursor-pointer ${isSelected ? 'selected' : ''} ${node.is_private ? 'private' : ''
-          }`}
+        className={`
+          flex items-center gap-2 py-1.5 pr-2 cursor-pointer transition-colors relative group
+          ${isSelected ? 'bg-indigo-500/20 text-indigo-300' : 'hover:bg-gray-800 text-gray-400 hover:text-gray-200'}
+          ${node.level === 0 ? 'px-3 font-semibold' : 'text-sm'}
+        `}
+        style={{ paddingLeft: node.level === 0 ? '12px' : `${(node.level * 20) + 12}px` }}
         onClick={handleSelectChannel}
       >
-        {hasChildren && (
-          <button
-            className={`expand-btn ${isExpanded ? 'expanded' : ''}`}
-            onClick={handleToggleExpand}
-            aria-label={isExpanded ? 'Collapse' : 'Expand'}
-          >
-            <span className='chevron'>▶</span>
-          </button>
-        )}
-        {!hasChildren && <span className='expand-placeholder'></span>}
+        {/* Expand/Collapse Chevron */}
+        <div
+          className="w-4 h-4 flex items-center justify-center shrink-0"
+          onClick={handleToggleExpand}
+        >
+          {hasChildren ? (
+            <span className={`text-[10px] transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+              ▶
+            </span>
+          ) : (
+            <span className="w-1 h-1 rounded-full bg-gray-700" />
+          )}
+        </div>
 
-        <span className='channel-icon'>{node.is_private ? '🔒' : '#'}</span>
-        <span className='channel-name flex-1 truncate'>{node.name}</span>
+        {/* Icon & Name */}
+        <span className="shrink-0 opacity-70">
+          {node.is_private && '🔒'}
+        </span>
+        <span className="truncate flex-1 select-none">
+          {node.name}
+        </span>
 
-        {/* Channel Actions (Visible on Hover) */}
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-800 rounded flex gap-1 items-center z-10 shadow-lg border border-gray-700">
-          {/* Add Sub Channel */}
+        {/* Actions (visible on group hover) */}
+        <div className="hidden group-hover:flex items-center gap-1 bg-gray-800/90 rounded px-1 absolute right-2 shadow-sm border border-gray-700 z-[100]">
           <button
             className="p-1 hover:text-white text-gray-400"
             title="Add sub-channel"
             onClick={(e) => {
               e.stopPropagation()
-              e.preventDefault()
+              console.log('Add clicked for', node.name)
               onAddSubChannel?.(node.id)
             }}
           >
-            <span className="text-xs">+</span>
+            <span className="text-xs font-bold">+</span>
           </button>
-          {/* Rename (Admin) */}
           <button
             className="p-1 hover:text-white text-gray-400"
-            title="Rename channel"
+            title="Rename"
             onClick={(e) => {
               e.stopPropagation()
-              e.preventDefault()
+              console.log('Rename clicked for', node.name)
               onRename?.(node.id, node.name)
             }}
           >
             <span className="text-xs">✎</span>
           </button>
-          {/* Delete (Admin) */}
           <button
-            className="p-1 hover:text-red-500 text-gray-400"
-            title="Delete channel"
+            className="p-1 hover:text-red-400 text-gray-400"
+            title="Delete"
             onClick={(e) => {
               e.stopPropagation()
-              e.preventDefault()
+              console.log('Delete button clicked for', node.name)
+              // Temporary alert to debug click
+              // alert('Delete clicked for ' + node.name)
               onDelete?.(node.id)
             }}
           >
@@ -109,12 +139,14 @@ const ChannelTreeNode: React.FC<ChannelTreeNodeProps> = ({
         </div>
 
         {node.unreadCount && node.unreadCount > 0 && (
-          <span className='unread-badge'>{node.unreadCount}</span>
+          <span className="ml-auto bg-indigo-500 text-white text-[10px] px-1.5 rounded-full min-w-[1.25rem] text-center">
+            {node.unreadCount}
+          </span>
         )}
       </div>
 
       {hasChildren && isExpanded && (
-        <ul className='channel-children'>
+        <ul className="pb-1 w-full relative">
           {node.children!.map((child) => (
             <ChannelTreeNode
               key={child.id}

@@ -7,6 +7,8 @@ import { useUserStore } from '@/store/useUserStore';
 import { Channel } from '@/types';
 import { deleteChannel, updateChannel, createChannel, addChannelMember } from '@/lib/supabase/channels';
 import { CreateChannelModal } from '@/components/Sidebar/CreateChannelModal';
+import { RenameChannelModal } from '@/components/Sidebar/RenameChannelModal';
+import { DeleteChannelModal } from '@/components/Sidebar/DeleteChannelModal';
 
 const workspaceId = '2e95c2c3-10f1-472a-8b51-5aefe3938185';
 
@@ -15,6 +17,13 @@ export default function ChannelsPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Modals state
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [channelToRename, setChannelToRename] = useState<{ id: string, name: string } | null>(null);
+
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [channelToDelete, setChannelToDelete] = useState<{ id: string, name: string } | null>(null);
 
   const profile = useUserStore((state) => state.profile);
 
@@ -64,23 +73,34 @@ export default function ChannelsPage() {
     }
   };
 
-  const handleRename = async (channelId: string, currentName: string) => {
-    const newName = window.prompt("Enter new name:", currentName);
-    if (newName && newName.trim() && newName !== currentName) {
-      try {
-        await updateChannel(channelId, { name: newName.trim() });
-        loadChannels();
-      } catch (e) { alert("Failed to rename"); }
-    }
+  // --- Handlers for opening modals ---
+
+  const handleRename = (channelId: string, currentName: string) => {
+    setChannelToRename({ id: channelId, name: currentName });
+    setRenameModalOpen(true);
   }
 
-  const handleDelete = async (channelId: string) => {
-    if (window.confirm("Are you sure? This deletes all subchannels and messages.")) {
-      try {
-        await deleteChannel(channelId);
-        loadChannels();
-      } catch (e) { alert("Failed to delete channel. Check permissions."); }
-    }
+  const handleDelete = (channelId: string, channelName: string) => {
+    setChannelToDelete({ id: channelId, name: channelName });
+    setDeleteModalOpen(true);
+  }
+
+  // --- Actual Actions ---
+
+  const performRename = async (newName: string) => {
+    if (!channelToRename) return;
+    try {
+      await updateChannel(channelToRename.id, { name: newName });
+      loadChannels();
+    } catch (e: any) { alert("Failed to rename: " + (e.message || 'Unknown')); }
+  }
+
+  const performDelete = async () => {
+    if (!channelToDelete) return;
+    try {
+      await deleteChannel(channelToDelete.id);
+      loadChannels();
+    } catch (e: any) { alert("Failed to delete channel: " + (e.message || 'Check permissions')); }
   }
 
   const rootChannels = channels.filter((ch) => !ch.parent_id);
@@ -117,13 +137,13 @@ export default function ChannelsPage() {
               >
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="font-bold text-lg text-white">#{channel.name}</h3>
+                    <h3 className="font-bold text-lg text-white">{channel.name}</h3>
                     <p className="text-sm text-gray-400 mt-2">
                       {channel.description || 'No description'}
                     </p>
                   </div>
                   {/* Action Buttons for Card */}
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 z-10">
                     <button
                       className="text-gray-500 hover:text-white p-1"
                       onClick={(e) => { e.stopPropagation(); handleRename(channel.id, channel.name); }}
@@ -133,7 +153,7 @@ export default function ChannelsPage() {
                     </button>
                     <button
                       className="text-gray-500 hover:text-red-400 p-1"
-                      onClick={(e) => { e.stopPropagation(); handleDelete(channel.id); }}
+                      onClick={(e) => { e.stopPropagation(); handleDelete(channel.id, channel.name); }}
                       title="Delete"
                     >
                       🗑️
@@ -156,7 +176,7 @@ export default function ChannelsPage() {
                           }}
                           className="text-xs text-purple-400 hover:underline cursor-pointer flex justify-between group/sub"
                         >
-                          <span>#{sub.name}</span>
+                          <span>{sub.name}</span>
                           {/* Subchannel actions */}
                           <div className="flex opacity-0 group-hover/sub:opacity-100 gap-2">
                             <button
@@ -166,7 +186,7 @@ export default function ChannelsPage() {
                             >✎</button>
                             <button
                               className="text-gray-600 hover:text-red-400"
-                              onClick={(e) => { e.stopPropagation(); handleDelete(sub.id); }}
+                              onClick={(e) => { e.stopPropagation(); handleDelete(sub.id, sub.name); }}
                               title="Delete"
                             >x</button>
                           </div>
@@ -186,11 +206,30 @@ export default function ChannelsPage() {
         </div>
       )}
 
+      {/* Modals */}
       <CreateChannelModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onCreateChannel={handleCreateChannelSubmit}
       />
+
+      {channelToRename && (
+        <RenameChannelModal
+          isOpen={renameModalOpen}
+          onClose={() => setRenameModalOpen(false)}
+          onRename={performRename}
+          currentName={channelToRename.name}
+        />
+      )}
+
+      {channelToDelete && (
+        <DeleteChannelModal
+          isOpen={deleteModalOpen}
+          onClose={() => setDeleteModalOpen(false)}
+          onDelete={performDelete}
+          channelName={channelToDelete.name}
+        />
+      )}
     </div>
   );
 }

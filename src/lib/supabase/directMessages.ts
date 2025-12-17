@@ -366,10 +366,25 @@ export const subscribeToMessages = (
 
       if (error) {
         // "no rows" is not really an error, it just means no messages yet
-        if (!error.message.includes('no rows')) {
+        // Also ignore empty error objects which Supabase sometimes returns
+        const isKnownHarmless =
+          !error ||
+          (Object.keys(error).length === 0 && !error.message && !error.code) ||
+          error.code === 'PGRST116' ||
+          error.message?.includes('no rows') ||
+          error.message?.includes('JSON object requested, multiple (or no) rows returned')
+
+        if (!isKnownHarmless) {
           console.error('❌ [POLLING] Error:', error)
           consecutiveErrors = Math.min(consecutiveErrors + 1, MAX_CONSECUTIVE_ERRORS)
         } else {
+          // Reset or harmless
+          // Ensure we don't count harmless empty polls as errors
+          consecutiveErrors = 0
+        }
+
+        if (!consecutiveErrors) {
+          // Reset error counter on successful poll (or harmless error)
           // Reset error counter on successful poll
           consecutiveErrors = 0
 

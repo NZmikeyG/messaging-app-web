@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useRef } from 'react'
+import Image from 'next/image' // Added Image import
 import { useParams } from 'next/navigation'
 import { useUserStore } from '@/store/useUserStore'
 import {
@@ -190,7 +191,7 @@ export default function DMConversation() {
       <div className="border-b border-neutral-800 bg-neutral-800 p-4 shrink-0 flex justify-between items-center">
         <div>
           <h2 className="font-bold text-lg">{otherUser?.username || 'User'}</h2>
-          <div className={`text-xs ${recipientPresence?.is_online ? 'text-green-400' : 'text-gray-400'}`}>
+          <div className={`text - xs ${recipientPresence?.is_online ? 'text-green-400' : 'text-gray-400'} `}>
             {recipientPresence?.is_online ? '● Online' : '● Offline'}
           </div>
         </div>
@@ -205,7 +206,7 @@ export default function DMConversation() {
           return (
             <div
               key={msg.id}
-              className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group relative items-end`}
+              className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group relative items - end`}
               onMouseEnter={() => {
                 if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current)
                 setHoveredMessageId(msg.id)
@@ -215,13 +216,15 @@ export default function DMConversation() {
               }}
             >
               {!isOwn && (
-                <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold shrink-0 mr-2 mb-1 overflow-hidden">
-                  {otherUser?.avatar_url ? (
-                    <img src={otherUser.avatar_url} alt={otherUser.username} className="w-full h-full object-cover" />
-                  ) : (
-                    otherUser?.username?.[0] || 'U'
-                  )}
-                </div>
+                <div className="relative w-8 h-8 shrink-0 mr-2 mb-1">
+                  <Image
+                    src={otherUser?.avatar_url || `https://ui-avatars.com/api/?name=${otherUser?.username || 'User'}&background=random`}
+                    alt={otherUser?.username || 'User'}
+                    className="rounded-full object-cover"
+                    fill
+                    sizes="32px"
+                  />
+                </div >
               )}
 
               <div className="max-w-[70%]">
@@ -276,15 +279,19 @@ export default function DMConversation() {
                 )}
               </div>
 
-              {isOwn && (
-                <div className="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-xs font-bold shrink-0 ml-2 mb-1 overflow-hidden">
-                  {currentUser?.avatar_url ? (
-                    <img src={currentUser.avatar_url} alt={currentUser.username} className="w-full h-full object-cover" />
-                  ) : (
-                    currentUser?.username?.[0] || 'U'
-                  )}
-                </div>
-              )}
+              {
+                isOwn && (
+                  <div className="relative w-8 h-8 shrink-0 ml-2 mb-1">
+                    <Image
+                      src={currentUser?.avatar_url || `https://ui-avatars.com/api/?name=${currentUser?.username || 'User'}&background=random`}
+                      alt={currentUser?.username || 'User'}
+                      className="rounded-full object-cover"
+                      fill
+                      sizes="32px"
+                    />
+                  </div>
+                )
+              }
 
 
               {/* Action Button - Adjusted Positioning */}
@@ -305,14 +312,14 @@ export default function DMConversation() {
                   </div>
                 )
               }
-            </div>
+            </div >
           )
         })}
         <div ref={messagesEndRef} />
-      </div>
+      </div >
 
       {/* Input */}
-      <form onSubmit={handleSendMessage} className="p-4 bg-neutral-800 border-t border-neutral-700 flex gap-2">
+      < form onSubmit={handleSendMessage} className="p-4 bg-neutral-800 border-t border-neutral-700 flex gap-2" >
         <input
           value={messageContent}
           onChange={e => setMessageContent(e.target.value)}
