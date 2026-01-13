@@ -51,18 +51,17 @@ function NavButton({ isActive, onClick, icon, label }: NavButtonProps) {
 export default function SidebarNav({ activeTab, onTabSelect }: SidebarNavProps) {
     return (
         <div className="w-[72px] theme-bg-tertiary flex flex-col items-center py-6 gap-6 border-r theme-border shrink-0 z-50 relative h-full"> {/* Added z-50, relative, and h-full */}
-            {/* Activity Button (Replaces Logo) */}
+            {/* Activity Button (Uses Custom Logo) */}
             <button
                 onClick={() => onTabSelect('activity')}
                 title="Activity"
                 className={`
-                    w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-purple-900/20 mb-2 transition-all duration-200 group relative
+                    w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-purple-900/20 mb-2 transition-all duration-200 group relative overflow-hidden
                     ${activeTab === 'activity' ? 'bg-indigo-500 scale-105' : 'bg-gradient-to-br from-purple-600 to-blue-600 hover:scale-105 hover:shadow-purple-500/30'}
                 `}
             >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-white">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-                </svg>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo.png" alt="Logo" className="w-7 h-7 object-contain" />
 
                 {/* Tooltip for top custom button */}
                 <span className="absolute left-full ml-4 px-3 py-1.5 rounded-md text-sm font-medium bg-gray-700 text-white whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 z-50">

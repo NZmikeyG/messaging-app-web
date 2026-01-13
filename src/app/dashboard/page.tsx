@@ -311,7 +311,7 @@ export default function DashboardPage() {
 
           {/* Files Card */}
           <button
-            onClick={() => alert('Files feature coming soon!')}
+            onClick={() => router.push('/dashboard/files')}
             className="group relative p-8 theme-bg-secondary rounded-xl border theme-border hover:border-orange-500 transition-all duration-300 hover:shadow-2xl hover:shadow-orange-500/20 text-left"
           >
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
@@ -326,9 +326,6 @@ export default function DashboardPage() {
             <p className="text-gray-400 text-sm">
               Manage and share files with your team securely.
             </p>
-            <span className="absolute bottom-4 right-4 text-xs bg-gray-900 border border-gray-600 px-2 py-1 rounded text-gray-400">
-              Coming Soon
-            </span>
           </button>
 
           {/* Apps Card */}

@@ -25,6 +25,8 @@ import SidebarNav, { type NavTab } from './SidebarNav'
 import SidebarPane from './SidebarPane'
 
 import { ActivityPanel } from './ActivityPanel'
+import { HardDrive, Plus } from 'lucide-react'
+import type { UserIntegration } from '@/types'
 
 interface SidebarProps {
   workspaceId: string
@@ -50,6 +52,7 @@ export default function Sidebar({
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<NavTab>('channels')
   const [isActivityOpen, setIsActivityOpen] = useState(false)
+  const [integrations, setIntegrations] = useState<UserIntegration[]>([])
 
   // Modal States
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false)
@@ -70,8 +73,9 @@ export default function Sidebar({
       // Navigate to dedicated settings page
       router.push('/dashboard/settings')
     } else if (tab === 'files') {
-      // Navigate to dedicated files page
-      router.push('/dashboard/files')
+      // Show files pane in sidebar
+      setActiveTab(tab)
+      setIsActivityOpen(false)
     } else {
       setActiveTab(tab)
       setIsActivityOpen(false) // Auto-close activity panel
@@ -117,6 +121,23 @@ export default function Sidebar({
     const intervalId = setInterval(() => loadData(), 5000)
     return () => clearInterval(intervalId)
   }, [loadData])
+
+  // Load user integrations for Files tab
+  useEffect(() => {
+    const loadIntegrations = async () => {
+      if (!profile?.id) return
+
+      const { data } = await supabase
+        .from('user_integrations')
+        .select('*')
+        .eq('user_id', profile.id)
+        .order('created_at', { ascending: false })
+
+      if (data) setIntegrations(data)
+    }
+
+    loadIntegrations()
+  }, [profile?.id])
 
 
   // --- Handlers ---
@@ -364,6 +385,74 @@ export default function Sidebar({
     </SidebarPane>
   )
 
+  const renderFilesContent = () => (
+    <SidebarPane
+      title={
+        <Link href="/dashboard/files" className="hover:text-gray-300 transition-colors">
+          Files
+        </Link>
+      }
+      headerAction={
+        <button
+          onClick={() => router.push('/dashboard/settings')}
+          className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition"
+          title="Add Drive"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      }
+    >
+      <div className="p-2 space-y-1">
+        {/* Default Workspace Drive */}
+        <button
+          onClick={() => router.push('/dashboard/files')}
+          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-800/50 rounded-lg transition group text-left"
+        >
+          <div className="w-9 h-9 rounded-lg bg-orange-600/20 text-orange-400 flex items-center justify-center">
+            <HardDrive className="w-5 h-5" />
+          </div>
+          <div className="overflow-hidden flex-1">
+            <span className="text-sm font-medium theme-text-primary truncate block">
+              Shared Workspace
+            </span>
+            <span className="text-xs text-gray-500">Default Drive</span>
+          </div>
+        </button>
+
+        {/* Connected Drives */}
+        {integrations.map((integration) => (
+          <button
+            key={integration.id}
+            onClick={() => router.push(`/dashboard/files?drive=${integration.id}`)}
+            className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-800/50 rounded-lg transition group text-left"
+          >
+            <div className="w-9 h-9 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center">
+              <HardDrive className="w-5 h-5" />
+            </div>
+            <div className="overflow-hidden flex-1">
+              <span className="text-sm font-medium theme-text-primary truncate block">
+                {integration.label}
+              </span>
+              <span className="text-xs text-gray-500">Google Drive</span>
+            </div>
+          </button>
+        ))}
+
+        {integrations.length === 0 && (
+          <div className="text-center py-6">
+            <p className="text-gray-500 text-xs mb-2">No drives connected</p>
+            <button
+              onClick={() => router.push('/dashboard/settings')}
+              className="text-indigo-400 hover:text-indigo-300 text-xs font-medium"
+            >
+              Connect Google Drive
+            </button>
+          </div>
+        )}
+      </div>
+    </SidebarPane>
+  )
+
   return (
     <div className="flex h-full relative"> {/* Relative for absolute positioning of activity panel */}
       {/* 1. Primary Navigation Rail */}
@@ -383,8 +472,9 @@ export default function Sidebar({
         <div className="flex-1 overflow-hidden h-full flex flex-col">
           {activeTab === 'channels' && renderChannelsContent()}
           {activeTab === 'dms' && renderDMsContent()}
+          {activeTab === 'files' && renderFilesContent()}
           {activeTab === 'settings' && renderSettingsContent()}
-          {(activeTab !== 'channels' && activeTab !== 'dms' && activeTab !== 'settings') && (
+          {(activeTab !== 'channels' && activeTab !== 'dms' && activeTab !== 'files' && activeTab !== 'settings') && (
             <SidebarPane title="Coming Soon">
               <div className="flex items-center justify-center p-8 text-gray-500 text-sm">
                 This feature is currently under development.

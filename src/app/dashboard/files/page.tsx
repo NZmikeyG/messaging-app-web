@@ -5,8 +5,10 @@ import { FileExplorer } from '@/components/Files/FileExplorer'
 import { FileUploader } from '@/components/Files/FileUploader'
 import { RefreshCw } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
+import { useSearchParams } from 'next/navigation'
 
 export default function FilesPage() {
+    const searchParams = useSearchParams()
     const [files, setFiles] = useState([])
     const [loading, setLoading] = useState(true)
     const [integrations, setIntegrations] = useState<any[]>([])
@@ -45,10 +47,20 @@ export default function FilesPage() {
         }
     }
 
+    // Load integrations on mount
     useEffect(() => {
         loadIntegrations()
     }, [])
 
+    // Read drive from URL query params
+    useEffect(() => {
+        const driveId = searchParams.get('drive')
+        if (driveId) {
+            setSelectedIntegrationId(driveId)
+        }
+    }, [searchParams])
+
+    // Reload files when selected drive changes
     useEffect(() => {
         loadFiles()
     }, [selectedIntegrationId])
