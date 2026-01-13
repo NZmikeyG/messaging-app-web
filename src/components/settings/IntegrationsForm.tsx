@@ -11,6 +11,7 @@ export function IntegrationsForm() {
     const [loading, setLoading] = useState(true)
     const [editingId, setEditingId] = useState<string | null>(null)
     const [editLabel, setEditLabel] = useState('')
+    const [deletingId, setDeletingId] = useState<string | null>(null)
     const router = useRouter()
     const searchParams = useSearchParams()
 
@@ -41,21 +42,41 @@ export function IntegrationsForm() {
         setLoading(false)
     }
 
-    const handleConnect = () => {
-        window.location.href = '/api/auth/google'
+    const handleConnect = async () => {
+        // Get user ID from client-side before redirecting
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+            alert('You must be logged in to connect a drive')
+            return
+        }
+        window.location.href = `/api/auth/google?userId=${user.id}`
     }
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to disconnect this account?')) return
+        // If not in confirm mode, enter confirm mode
+        if (deletingId !== id) {
+            setDeletingId(id)
+            // Auto-reset after 3 seconds if not confirmed
+            setTimeout(() => setDeletingId(prev => prev === id ? null : prev), 3000)
+            return
+        }
 
-        const { error } = await supabase
-            .from('user_integrations')
-            .delete()
-            .eq('id', id)
+        // In confirm mode - proceed with delete
+        console.log('[IntegrationsForm] Deleting integration:', id)
+        setDeletingId(null)
 
-        if (!error) {
-            setIntegrations(prev => prev.filter(i => i.id !== id))
-        } else {
+        try {
+            const response = await fetch(`/api/integrations?id=${id}`, {
+                method: 'DELETE'
+            })
+
+            if (response.ok) {
+                setIntegrations(prev => prev.filter(i => i.id !== id))
+            } else {
+                alert('Failed to delete integration')
+            }
+        } catch (err) {
+            console.error('Delete error:', err)
             alert('Failed to delete integration')
         }
     }
@@ -135,8 +156,13 @@ export function IntegrationsForm() {
                                 </button>
                             )}
 
-                            <button onClick={() => handleDelete(integration.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded transition" title="Disconnect">
+                            <button
+                                onClick={() => handleDelete(integration.id)}
+                                className={`p-2 rounded transition flex items-center gap-1 text-xs ${deletingId === integration.id ? 'bg-red-500/20 text-red-400' : 'text-red-400 hover:text-red-300 hover:bg-red-400/10'}`}
+                                title="Disconnect"
+                            >
                                 <Trash2 className="w-4 h-4" />
+                                {deletingId === integration.id && <span className="font-medium">Confirm?</span>}
                             </button>
                         </div>
                     </div>

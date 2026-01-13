@@ -37,7 +37,7 @@ export interface DriveFile {
     size?: string
 }
 
-export async function listFiles(query?: string, pageToken?: string, authClient?: any) {
+export async function listFiles(query?: string, pageToken?: string, authClient?: any, folderId?: string) {
     try {
         const drive = authClient ? google.drive({ version: 'v3', auth: authClient }) : defaultDrive
 
@@ -48,23 +48,28 @@ export async function listFiles(query?: string, pageToken?: string, authClient?:
         // Default query: Not trashed
         let q = "trashed = false"
 
-        // Only use ROOT_FOLDER_ID if we are using the default (Service Account) drive
-        if (!authClient && ROOT_FOLDER_ID) {
+        // If folderId is provided, use it; otherwise use root folder logic
+        if (folderId) {
+            q += ` and '${folderId}' in parents`
+        } else if (!authClient && ROOT_FOLDER_ID) {
+            // Only use ROOT_FOLDER_ID if we are using the default (Service Account) drive
             q += ` and '${ROOT_FOLDER_ID}' in parents`
+        } else if (authClient) {
+            // For user auth without folderId, show root folder contents
+            q += ` and 'root' in parents`
         }
 
         if (query) {
             q += ` and name contains '${query}'`
         }
 
-        // If using user auth, we might want to filter sensitive folders or just show root.
-        // For now, let's keep it open.
+        console.log('[listFiles] Query:', q)
 
         const res = await drive.files.list({
-            pageSize: 20,
+            pageSize: 100, // Show more files
             pageToken,
             q,
-            fields: 'nextPageToken, files(id, name, mimeType, webViewLink, iconLink, thumbnailLink, modifiedTime, size)',
+            fields: 'nextPageToken, files(id, name, mimeType, webViewLink, iconLink, thumbnailLink, modifiedTime, size, parents)',
             orderBy: 'folder,modifiedTime desc', // Folders first, then recent
         })
 

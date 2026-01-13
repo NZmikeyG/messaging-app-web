@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server'
 import { uploadFile } from '@/lib/googleDrive'
 import { Readable } from 'stream'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedClient, refreshAccessToken } from '@/lib/google/oauth'
+
+// Use service role client to read integrations (bypasses RLS)
+const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function POST(request: Request) {
     try {
@@ -20,9 +26,7 @@ export async function POST(request: Request) {
         let authClient = null
 
         if (integrationId && integrationId !== 'default') {
-            const supabase = await createClient()
-
-            const { data: integration, error } = await supabase
+            const { data: integration, error } = await supabaseAdmin
                 .from('user_integrations')
                 .select('*')
                 .eq('id', integrationId)
@@ -41,16 +45,15 @@ export async function POST(request: Request) {
                 accessToken = credentials.access_token
 
                 // Update DB
-                await supabase.from('user_integrations').update({
+                await supabaseAdmin.from('user_integrations').update({
                     access_token: credentials.access_token,
                     expires_at: credentials.expiry_date,
                     refresh_token: credentials.refresh_token || integration.refresh_token
                 }).eq('id', integrationId)
             }
 
-            authClient = await getAuthenticatedClient(accessToken, integration.refresh_token)
+            authClient = await getAuthenticatedClient(accessToken!, integration.refresh_token)
         }
-
 
         // Convert File to Stream
         const buffer = Buffer.from(await file.arrayBuffer())
@@ -58,8 +61,6 @@ export async function POST(request: Request) {
         stream.push(buffer)
         stream.push(null)
 
-        // Note: folderId is empty string, which means 'root' (in uploadFile logic if not provided)
-        // uploadFile(stream, name, mime, folderId, authClient)
         const data = await uploadFile(stream, file.name, file.type, '', authClient)
 
         return NextResponse.json(data)

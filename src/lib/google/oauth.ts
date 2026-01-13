@@ -10,15 +10,30 @@ const oauth2Client = new google.auth.OAuth2(
     REDIRECT_URI
 )
 
-export function generateAuthUrl() {
+// Generate auth URL with user ID in state parameter
+export function generateAuthUrl(userId: string) {
+    // Encode user ID in state to preserve across redirect
+    const state = Buffer.from(JSON.stringify({ userId })).toString('base64')
+
     return oauth2Client.generateAuthUrl({
         access_type: 'offline', // Required to get refresh_token
         scope: [
-            'https://www.googleapis.com/auth/drive.file',
+            'https://www.googleapis.com/auth/drive.readonly', // See all files
             // Add calendar scopes here later
         ],
         prompt: 'consent', // Force consent to ensure we get a refresh token
+        state, // Pass user ID through OAuth flow
     })
+}
+
+// Decode state parameter to get user ID
+export function decodeState(state: string): { userId: string } | null {
+    try {
+        const decoded = Buffer.from(state, 'base64').toString('utf-8')
+        return JSON.parse(decoded)
+    } catch {
+        return null
+    }
 }
 
 export async function getTokens(code: string) {
