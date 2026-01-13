@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
 import { Providers } from './providers'
+import { ThemeProvider } from '@/components/ThemeProvider'
 
 export const metadata: Metadata = {
   title: 'Messaging App',
@@ -16,10 +17,12 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning data-theme="dark">
       <body className="antialiased">
         <Providers>
-          {children}
+          <ThemeProvider>
+            {children}
+          </ThemeProvider>
           <Toaster
             position="top-right"
             toastOptions={{
@@ -47,3 +50,4 @@ export default function RootLayout({
     </html>
   )
 }
+

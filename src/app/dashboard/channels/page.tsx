@@ -106,7 +106,7 @@ export default function ChannelsPage() {
   const rootChannels = channels.filter((ch) => !ch.parent_id);
 
   return (
-    <div className="flex-1 p-8 bg-gray-900 text-white min-h-full">
+    <div className="flex-1 p-8 theme-bg-primary theme-text-primary min-h-full">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold">Channels</h1>
         <button
@@ -133,19 +133,19 @@ export default function ChannelsPage() {
               <div
                 key={channel.id}
                 onClick={() => router.push(`/dashboard/channel/${channel.id}`)}
-                className="p-4 bg-gray-800 rounded-lg border border-gray-700 hover:border-purple-500 hover:shadow-lg cursor-pointer transition relative group"
+                className="p-4 theme-bg-secondary rounded-lg border theme-border hover:border-purple-500 hover:shadow-lg cursor-pointer transition relative group"
               >
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="font-bold text-lg text-white">{channel.name}</h3>
-                    <p className="text-sm text-gray-400 mt-2">
+                    <h3 className="font-bold text-lg theme-text-primary">{channel.name}</h3>
+                    <p className="text-sm theme-text-muted mt-2">
                       {channel.description || 'No description'}
                     </p>
                   </div>
                   {/* Action Buttons for Card */}
                   <div className="flex gap-2 z-10">
                     <button
-                      className="text-gray-500 hover:text-white p-1"
+                      className="theme-text-muted hover:theme-text-primary p-1"
                       onClick={(e) => { e.stopPropagation(); handleRename(channel.id, channel.name); }}
                       title="Rename"
                     >
@@ -162,7 +162,7 @@ export default function ChannelsPage() {
                 </div>
 
                 {subChannels.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-gray-700">
+                  <div className="mt-3 pt-3 border-t theme-border">
                     <p className="text-xs font-semibold text-gray-500 mb-2">
                       Sub-channels ({subChannels.length})
                     </p>
@@ -180,7 +180,7 @@ export default function ChannelsPage() {
                           {/* Subchannel actions */}
                           <div className="flex opacity-0 group-hover/sub:opacity-100 gap-2">
                             <button
-                              className="text-gray-500 hover:text-white"
+                              className="theme-text-muted hover:theme-text-primary"
                               onClick={(e) => { e.stopPropagation(); handleRename(sub.id, sub.name); }}
                               title="Rename"
                             >✎</button>

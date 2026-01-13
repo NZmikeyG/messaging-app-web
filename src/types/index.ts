@@ -106,3 +106,14 @@ export interface ChannelNode {
 
 export type UserProfile = Profile
 
+
+export interface UserIntegration {
+  id: string
+  user_id: string
+  provider: 'google'
+  access_token: string
+  refresh_token: string
+  expires_at: number
+  label: string
+  created_at: string
+}

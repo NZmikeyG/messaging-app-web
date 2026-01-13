@@ -208,7 +208,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-900">
+      <div className="h-screen flex items-center justify-center theme-bg-primary">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
           <p className="text-gray-300">Loading dashboard...</p>
@@ -219,7 +219,7 @@ export default function DashboardPage() {
 
   if (error && !profile) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-900">
+      <div className="h-screen flex items-center justify-center theme-bg-primary">
         <div className="bg-red-900 p-6 rounded max-w-md">
           <h2 className="text-red-100 font-bold mb-2">Dashboard Error</h2>
           <p className="text-red-200 mb-4">{error}</p>
@@ -235,7 +235,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col p-8 bg-gray-900 text-white h-full overflow-y-auto">
+    <div className="flex-1 flex flex-col p-8 theme-bg-primary theme-text-primary h-full overflow-y-auto">
       <div className="max-w-5xl mx-auto w-full">
         {/* Welcome Header */}
         <div className="mb-12 text-center">
@@ -252,7 +252,7 @@ export default function DashboardPage() {
           {/* Channels Card */}
           <button
             onClick={() => router.push('/dashboard/channels')} // Assuming this route exists or we direct to first channel
-            className="group relative p-8 bg-gray-800 rounded-xl border border-gray-700 hover:border-blue-500 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/20 text-left"
+            className="group relative p-8 theme-bg-secondary rounded-xl border theme-border hover:border-blue-500 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/20 text-left"
           >
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
               <span className="text-6xl">💬</span>
@@ -271,7 +271,7 @@ export default function DashboardPage() {
           {/* DMs Card */}
           <button
             onClick={() => router.push('/dashboard/dm')}
-            className="group relative p-8 bg-gray-800 rounded-xl border border-gray-700 hover:border-purple-500 transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/20 text-left"
+            className="group relative p-8 theme-bg-secondary rounded-xl border theme-border hover:border-purple-500 transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/20 text-left"
           >
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
               <span className="text-6xl">📧</span>
@@ -290,7 +290,7 @@ export default function DashboardPage() {
           {/* Calendar Card (Not Implemented) */}
           <button
             onClick={() => alert('Calendar feature coming soon!')}
-            className="group relative p-8 bg-gray-800 rounded-xl border border-gray-700 hover:border-green-500 transition-all duration-300 hover:shadow-2xl hover:shadow-green-500/20 text-left"
+            className="group relative p-8 theme-bg-secondary rounded-xl border theme-border hover:border-green-500 transition-all duration-300 hover:shadow-2xl hover:shadow-green-500/20 text-left"
           >
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
               <span className="text-6xl">📅</span>
@@ -312,7 +312,7 @@ export default function DashboardPage() {
           {/* Files Card */}
           <button
             onClick={() => alert('Files feature coming soon!')}
-            className="group relative p-8 bg-gray-800 rounded-xl border border-gray-700 hover:border-orange-500 transition-all duration-300 hover:shadow-2xl hover:shadow-orange-500/20 text-left"
+            className="group relative p-8 theme-bg-secondary rounded-xl border theme-border hover:border-orange-500 transition-all duration-300 hover:shadow-2xl hover:shadow-orange-500/20 text-left"
           >
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
               <span className="text-6xl">📁</span>
@@ -334,7 +334,7 @@ export default function DashboardPage() {
           {/* Apps Card */}
           <button
             onClick={() => alert('Apps feature coming soon!')}
-            className="group relative p-8 bg-gray-800 rounded-xl border border-gray-700 hover:border-pink-500 transition-all duration-300 hover:shadow-2xl hover:shadow-pink-500/20 text-left"
+            className="group relative p-8 theme-bg-secondary rounded-xl border theme-border hover:border-pink-500 transition-all duration-300 hover:shadow-2xl hover:shadow-pink-500/20 text-left"
           >
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
               <span className="text-6xl">📦</span>
@@ -355,8 +355,8 @@ export default function DashboardPage() {
 
           {/* Settings Card */}
           <button
-            onClick={() => alert('Settings feature coming soon!')}
-            className="group relative p-8 bg-gray-800 rounded-xl border border-gray-700 hover:border-gray-500 transition-all duration-300 hover:shadow-2xl hover:shadow-gray-500/20 text-left"
+            onClick={() => router.push('/dashboard/settings')}
+            className="group relative p-8 theme-bg-secondary rounded-xl border theme-border hover:border-gray-500 transition-all duration-300 hover:shadow-2xl hover:shadow-gray-500/20 text-left"
           >
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
               <span className="text-6xl">⚙️</span>

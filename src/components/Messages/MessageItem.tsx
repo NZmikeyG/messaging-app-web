@@ -17,10 +17,51 @@ interface MessageItemProps {
   onRemoveReaction?: (reactionId: string) => Promise<void>
   onReply?: (message: Message) => void
   currentUserId?: string
-  onUserClick?: (user: { id: string, username: string, avatar_url?: string | null }) => void // Updated signature
+  onUserClick?: (user: { id: string, username: string, avatar_url?: string | null }) => void
+  channelMembers?: { id: string, username: string, avatar_url?: string | null }[]
 }
 
-// --- REFACTOR START ---
+// Keep helper simple if needed outside, but we move logic inside for closure access or pass args
+// Actually, let's move formatContent inside or pass args.
+const formatContent = (content: string, channelMembers: MessageItemProps['channelMembers'], onUserClick: MessageItemProps['onUserClick']) => {
+  if (!content) return null
+
+  // Split by mention pattern: @name (allowing spaces)
+  // We match one or more words following @.
+  // We use a capture group to split, but we need to be careful not to match too aggressively.
+  // Best approach: Match longest possible known username?
+  // Current approach: Split by @(words+spaces), then check.
+  // Regex: /(@[a-zA-Z0-9_]+(?: [a-zA-Z0-9_]+)*)/g matches @Word or @Word Word
+  const parts = content.split(/(@[a-zA-Z0-9_]+(?: [a-zA-Z0-9_]+)*)/g)
+
+  return parts.map((part, i) => {
+    if (part.startsWith('@')) {
+      const potentialUsername = part.slice(1)
+      // Look up user (case insensitive matching)
+      // We explicitly check if 'potentialUsername' matches a known member.
+      const user = channelMembers?.find(m => m.username?.toLowerCase() === potentialUsername.toLowerCase())
+
+      if (user) {
+        return (
+          <span
+            key={i}
+            className="text-blue-400 font-medium cursor-pointer hover:underline bg-blue-500/10 px-0.5 rounded"
+            onClick={(e) => {
+              e.stopPropagation()
+              onUserClick?.(user)
+            }}
+          >
+            {part}
+          </span>
+        )
+      }
+      // If not a user, return plain text (or just blue text if we want to fallback, but plain is safer for "blue text" bug)
+      return <span key={i} className="text-blue-400/70">{part}</span>
+    }
+    return part
+  })
+}
+
 export const MessageItem: React.FC<MessageItemProps> = ({
   message,
   reactions,
@@ -30,12 +71,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   onRemoveReaction,
   onReply,
   currentUserId,
-  onUserClick
+  onUserClick,
+  channelMembers
 }) => {
   const { profile: currentUserProfile } = useUserStore()
   const { getReactionsForMessage } = useMessageStore()
 
   const [isEditing, setIsEditing] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [editContent, setEditContent] = useState(message.content)
   const [isHovering, setIsHovering] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
@@ -43,11 +86,21 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   const isOwn = message.user_id === (currentUserId || currentUserProfile?.id)
   const displayReactions = reactions || getReactionsForMessage(message.id)
 
-  const handleEdit = async () => {
-    if (onEditMessage && editContent.trim()) {
+  const handleSaveEdit = async () => {
+    if (onEditMessage && editContent.trim() && editContent !== message.content) {
       await onEditMessage(message.id, editContent)
-      setIsEditing(false)
     }
+    setIsEditing(false)
+  }
+
+  const handleCancelEdit = () => {
+    setEditContent(message.content)
+    setIsEditing(false)
+  }
+
+  const handleEdit = () => {
+    setIsEditing(true)
+    setEditContent(message.content)
   }
 
   // Resolve Avatar/Username
@@ -99,125 +152,138 @@ export const MessageItem: React.FC<MessageItemProps> = ({
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => { setIsHovering(false); setShowPicker(false); }}
     >
-      {/* Left Column: Avatar */}
-      <div className="shrink-0 flex flex-col items-center">
-        <div
-          onClick={handleUserClick}
-          className="w-8 h-8 rounded-full overflow-hidden mt-1 cursor-pointer hover:ring-2 hover:ring-purple-500 transition-all shadow-sm relative"
-        >
+      <div className={`flex items-start gap-4 group ${(message.deleted || (message as any).is_deleted) ? 'opacity-50' : ''} w-full`}>
+        {/* Avatar */}
+        <div className="flex-shrink-0 cursor-pointer" onClick={() => !(message.deleted || (message as any).is_deleted) && handleUserClick()}>
           {userAvatar ? (
-            <Image
-              src={userAvatar}
-              alt={username}
-              fill
-              sizes="32px"
-              className="object-cover"
-            />
+            <div className="relative w-10 h-10">
+              <Image
+                src={userAvatar}
+                alt={username || 'User'}
+                fill
+                className="rounded-full object-cover"
+              />
+            </div>
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-gray-600 to-gray-700 flex items-center justify-center text-white text-xs font-bold">
-              {username?.[0]?.toUpperCase() || '?'}
+            <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-white font-bold">
+              {(username || '?')[0].toUpperCase()}
             </div>
           )}
         </div>
-      </div>
 
-      {/* Right Column: Content */}
-      <div className="flex-1 min-w-0">
-        {/* Header: Name • Time */}
-        <div className="flex items-center gap-2 text-xs mb-0.5">
-          <span
-            onClick={handleUserClick}
-            className="font-bold text-gray-300 hover:underline cursor-pointer hover:text-purple-400"
-          >
-            {username}
-          </span>
-          <span className="text-gray-500 text-[10px]">{timeString}</span>
-          {isEdited && <span className="text-gray-600 italic text-[10px]">(edited)</span>}
-        </div>
-
-        {/* Message Body */}
-        {isEditing ? (
-          <div className="mt-1">
-            <textarea
-              value={editContent} onChange={e => setEditContent(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-              rows={3}
-            />
-            <div className="flex gap-2 mt-2">
-              <button onClick={handleEdit} className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 font-medium">Save</button>
-              <button onClick={() => setIsEditing(false)} className="px-3 py-1 bg-transparent hover:bg-gray-800 text-gray-400 text-xs rounded transition-colors">Cancel</button>
-            </div>
-          </div>
-        ) : (
-          <div className="text-gray-200 text-sm leading-relaxed whitespace-pre-wrap break-words">
-            {message.content}
-          </div>
-        )}
-
-        {/* Action Row (Bottom) */}
-        {!isEditing && (
-          <div className="flex items-center gap-4 mt-1 opacity-100 transition-opacity relative">
-            <button
-              onClick={() => onReply && onReply(message)}
-              className="flex items-center gap-1 text-gray-500 hover:text-gray-300 text-xs font-bold transition-colors"
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2">
+            <span
+              className={`font-bold theme-text-primary ${!(message.deleted || (message as any).is_deleted) && 'cursor-pointer hover:underline'}`}
+              onClick={() => !(message.deleted || (message as any).is_deleted) && handleUserClick()}
             >
-              Reply
-            </button>
-
-            {/* More Actions (Edit/Delete) - Only if Own */}
-            {isOwn && (
-              <>
-                <button onClick={() => setIsEditing(true)} className="text-gray-500 hover:text-gray-300 text-xs font-bold">Edit</button>
-                <button
-                  onClick={async () => {
-                    if (onDeleteMessage) {
-                      try {
-                        await onDeleteMessage(message.id)
-                      } catch (err) {
-                        console.error('❌ [DELETE] Error in handler:', err)
-                      }
-                    } else {
-                      console.error('❌ [DELETE] Handler missing!')
-                    }
-                  }}
-                  className="text-gray-500 hover:text-red-400 text-xs font-bold"
-                >
-                  Delete
-                </button>
-              </>
+              {username}
+            </span>
+            <span className="text-xs theme-text-muted">
+              {timeString}
+            </span>
+            {(isEdited || (message as any).is_edited) && !(message.deleted || (message as any).is_deleted) && (
+              <span className="text-xs text-gray-500">(edited)</span>
             )}
+          </div>
 
-            {/* React Button (Moved to end) */}
-            <div className="relative">
+          <div className="mt-1 theme-text-secondary whitespace-pre-wrap break-words">
+            {isEditing ? (
+              <span className="italic text-gray-500">[deleted]</span>
+            ) : (
+              formatContent(message.content, channelMembers, onUserClick)
+            )}
+          </div>
+
+          {/* Reactions */}
+          {!(message.deleted || (message as any).is_deleted) && !isEditing && displayReactions && displayReactions.length > 0 && (
+            <div className="mt-2">
+              <EmojiReactions
+                message={message}
+                reactions={displayReactions}
+                onAddReaction={onAddReaction}
+                onRemoveReaction={onRemoveReaction}
+              />
+            </div>
+          )}
+
+          {/* Action Bar */}
+          {!(message.deleted || (message as any).is_deleted) && (
+            <div className="mt-2 flex items-center gap-4 relative">
+
+              {/* Add Reaction Button */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowPicker(!showPicker)}
+                  className={`flex items-center justify-center w-6 h-6 rounded-full hover:bg-gray-800/50 transition-colors ${showPicker ? 'theme-text-secondary bg-gray-800/50' : 'theme-text-muted'}`}
+                  title="Add Reaction"
+                >
+                  <span className="text-lg grayscale hover:grayscale-0 transition-all">😀</span>
+                </button>
+
+                {showPicker && (
+                  <EmojiPickerPopover
+                    onSelect={(emoji) => { onAddReaction?.(message.id, emoji); setShowPicker(false); }}
+                  />
+                )}
+              </div>
+
+              {/* Reply Button */}
               <button
-                onClick={() => setShowPicker(!showPicker)}
-                className={`flex items-center justify-center w-6 h-6 rounded-full hover:bg-gray-800 transition-colors ${showPicker ? 'text-gray-300 bg-gray-800' : 'text-gray-500'}`}
-                title="Add Reaction"
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onReply && onReply(message);
+                }}
+                className="theme-text-muted hover:theme-text-primary flex items-center gap-1 text-xs"
               >
-                <span className="text-lg grayscale hover:grayscale-0 transition-all">😀</span>
+                Reply
               </button>
 
-              {/* FULL Emoji Picker Popover */}
-              {showPicker && (
-                <EmojiPickerPopover
-                  onSelect={(emoji) => { onAddReaction?.(message.id, emoji); setShowPicker(false); }}
-                />
+              {/* Edit/Delete (Owner) */}
+              {isOwn && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('🔘 [MessageItem] Edit Clicked', message.id);
+                      handleEdit();
+                    }}
+                    className="theme-text-muted hover:theme-text-primary flex items-center gap-1 text-xs"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('🔘 [MessageItem] Delete Clicked', message.id);
+                      if (!onDeleteMessage) return;
+
+                      // Check if already in delete confirmation mode
+                      if (isDeleting) {
+                        onDeleteMessage(message.id);
+                        setIsDeleting(false);
+                      } else {
+                        setIsDeleting(true);
+                        // Auto-reset after 3 seconds if not confirmed
+                        setTimeout(() => setIsDeleting(false), 3000);
+                      }
+                    }}
+                    className={`flex items-center gap-1 text-xs transition-colors ${isDeleting ? 'text-red-500 font-bold hover:text-red-600' : 'theme-text-muted hover:text-red-400'}`}
+                  >
+                    {isDeleting ? 'Confirm?' : 'Delete'}
+                  </button>
+                </>
               )}
             </div>
-          </div>
-        )}
-
-        {/* Reactions Display */}
-        {displayReactions && displayReactions.length > 0 && (
-          <div className="mt-2">
-            <EmojiReactions
-              message={message}
-              reactions={displayReactions}
-              onAddReaction={onAddReaction}
-              onRemoveReaction={onRemoveReaction}
-            />
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )
@@ -228,7 +294,7 @@ const EmojiPickerPopover = ({ onSelect }: { onSelect: (emoji: string) => void })
   const emojisToShow = expanded ? EMOJI_LIST : COMMON_EMOJIS
 
   return (
-    <div className={`absolute bottom-full left-0 mb-2 z-50 bg-gray-900 border border-gray-700 rounded-xl shadow-xl p-3 gap-2 ${expanded
+    <div className={`absolute bottom-full left-0 mb-2 z-50 theme-bg-card border theme-border rounded-xl shadow-xl p-3 gap-2 ${expanded
       ? 'grid grid-cols-6 w-[280px] h-[200px] overflow-y-auto'
       : 'flex flex-row items-center whitespace-nowrap'
       }`}>

@@ -53,19 +53,19 @@ export default function DirectMessagesPage() {
 
   if (!profile?.id) {
     return (
-      <div className="h-full flex items-center justify-center bg-neutral-900">
-        <p className="text-gray-400">Please log in to view messages</p>
+      <div className="h-full flex items-center justify-center theme-bg-primary">
+        <p className="theme-text-muted">Please log in to view messages</p>
       </div>
     )
   }
 
   return (
-    <div className="h-full flex flex-col bg-neutral-900">
+    <div className="h-full flex flex-col theme-bg-primary">
       {/* Header */}
-      <div className="border-b border-neutral-800 p-4 bg-neutral-800">
+      <div className="border-b theme-border p-4 theme-bg-secondary">
         <div className="flex items-center justify-between">
           <div className="flex-1">
-            <h1 className="text-lg font-bold text-white">Direct Messages</h1>
+            <h1 className="text-lg font-bold theme-text-primary">Direct Messages</h1>
             <p className="text-xs text-gray-400 mt-1">
               {conversations.length} conversation{conversations.length !== 1 ? 's' : ''}
             </p>
@@ -104,7 +104,7 @@ export default function DirectMessagesPage() {
             <p className="text-gray-400">No conversations yet</p>
           </div>
         ) : (
-          <div className="divide-y divide-neutral-800">
+          <div className="divide-y theme-border">
             {conversations.map((conv) => {
               const otherUser = conv.other_user
               const presence = getUserPresence(otherUser?.id || '')
@@ -120,7 +120,7 @@ export default function DirectMessagesPage() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="text-white font-medium truncate">
+                      <h3 className="theme-text-primary font-medium truncate">
                         {otherUser?.username || otherUser?.email || 'Unknown'}
                       </h3>
                       <div className="shrink-0">

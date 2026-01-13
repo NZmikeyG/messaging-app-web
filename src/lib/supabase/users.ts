@@ -275,3 +275,26 @@ export const updateUserProfile = async (
     throw error
   }
 }
+
+/**
+ * Update user email via Supabase Auth (requires email verification)
+ */
+export const updateUserEmail = async (newEmail: string): Promise<void> => {
+  try {
+    console.log('📤 [UPDATE EMAIL] Requesting email change to:', newEmail)
+
+    const { error } = await supabase.auth.updateUser({
+      email: newEmail
+    })
+
+    if (error) {
+      console.error('❌ [UPDATE EMAIL] Failed:', error)
+      throw error
+    }
+
+    console.log('✅ [UPDATE EMAIL] Verification email sent')
+  } catch (error: any) {
+    console.error('❌ [UPDATE EMAIL] Exception:', error.message || error)
+    throw new Error(error.message || 'Failed to update email')
+  }
+}

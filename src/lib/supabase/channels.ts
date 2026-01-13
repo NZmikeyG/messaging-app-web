@@ -12,11 +12,6 @@ export async function getChannelHierarchy(
   try {
     console.log('📥 [CHANNELS] Fetching hierarchy for workspace:', workspaceId)
 
-    // Try RPC first
-    const { data, error } = await supabase.rpc('get_channel_hierarchy', {
-      p_workspace_id: workspaceId,
-    })
-
     // Helper to build tree from flat list
     const buildTree = (channels: any[]): ChannelHierarchy[] => {
       const channelMap = new Map<string, any>()
@@ -41,40 +36,23 @@ export async function getChannelHierarchy(
       return roots
     }
 
-    if (error) {
-      // Silence known RPC type mismatch error (42804) or bad request (400)
-      if (error.code !== '42804' && error.code !== 'PGRST202') {
-        console.log('ℹ️ [CHANNELS] RPC unavailable, using fallback:', error.message)
-      }
+    // We use a direct query to fetch channels and build the tree client-side
+    // This avoids persistent 400 errors with the RPC function
+    const { data: channels, error: queryError } = await supabase
+      .from('channels')
+      .select('id, name, description, is_private, parent_id, created_at, creator_id')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: true })
 
-      // Fallback: query channels table directly
-      const { data: fallbackData, error: fallbackError } = await supabase
-        .from('channels')
-        .select('id, name, description, is_private, parent_id, created_at, creator_id')
-        .eq('workspace_id', workspaceId)
-        .order('created_at', { ascending: true })
-
-      if (fallbackError) {
-        console.error('❌ [CHANNELS] Fallback query failed:', fallbackError)
-        throw fallbackError
-      }
-
-      console.log('✅ [CHANNELS] Got', fallbackData?.length ?? 0, 'channels (fallback flat)')
-      const tree = buildTree(fallbackData || [])
-      return tree
+    if (queryError) {
+      console.error('❌ [CHANNELS] Query failed:', queryError)
+      throw queryError
     }
 
-    // Even if RPC returns data, ensure it's structurally correct (some RPCs might return flat too depending on version)
-    // If the RPC returns a tree, good. If it returns flat, we might need to check.
-    // Assuming RPC `get_channel_hierarchy` returns a recursive JSON or similar.
-    // However, if the user says it's flat, maybe the RPC itself is returning flat data or failing.
-    // Safest bet: If data looks flat (no children and has parent_id), build tree.
-
-    // For now, let's assume RPC works if no error. But given the issue, I will force the tree build if it looks flat.
-    // Actually, checking if the RPC returns the correct shape is hard without seeing the RPC code.
-    // But if the user is seeing flatness, likely we are hitting the fallback.
-
-    return (data || []) as ChannelHierarchy[]
+    // Build tree from flat list
+    console.log('✅ [CHANNELS] Fetched', channels?.length ?? 0, 'channels')
+    const tree = buildTree(channels || [])
+    return tree
   } catch (error) {
     console.error('❌ [CHANNELS] Exception:', error)
     throw error

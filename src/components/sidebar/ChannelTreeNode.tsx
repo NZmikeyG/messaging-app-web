@@ -61,9 +61,8 @@ const ChannelTreeNode: React.FC<ChannelTreeNodeProps> = ({
     onSelect?.(node.id)
   }
 
-  // "Bubble" styling for top-level channels
   const bubbleClass = node.level === 0
-    ? "mb-2 border border-white/5 rounded-xl overflow-hidden bg-white/[0.02]"
+    ? "mb-2 border theme-border-secondary rounded-xl overflow-hidden theme-bg-secondary"
     : ""
 
   return (
@@ -71,7 +70,7 @@ const ChannelTreeNode: React.FC<ChannelTreeNodeProps> = ({
       <div
         className={`
           flex items-center gap-2 py-1.5 pr-2 cursor-pointer transition-colors relative group
-          ${isSelected ? 'bg-indigo-500/20 text-indigo-300' : 'hover:bg-gray-800 text-gray-400 hover:text-gray-200'}
+          ${isSelected ? 'bg-indigo-500/20 text-indigo-400' : 'hover:bg-gray-800/50 theme-text-secondary hover:theme-text-primary'}
           ${node.level === 0 ? 'px-3 font-semibold' : 'text-sm'}
         `}
         style={{ paddingLeft: node.level === 0 ? '12px' : `${(node.level * 20) + 12}px` }}
@@ -100,7 +99,7 @@ const ChannelTreeNode: React.FC<ChannelTreeNodeProps> = ({
         </span>
 
         {/* Actions (visible on group hover) */}
-        <div className="hidden group-hover:flex items-center gap-1 bg-gray-800/90 rounded px-1 absolute right-2 shadow-sm border border-gray-700 z-[100]">
+        <div className="hidden group-hover:flex items-center gap-1 theme-bg-secondary rounded px-1 absolute right-2 shadow-sm border theme-border-secondary z-[100]">
           <button
             className="p-1 hover:text-white text-gray-400"
             title="Add sub-channel"

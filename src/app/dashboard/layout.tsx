@@ -90,7 +90,7 @@ export default function DashboardLayout({
 
   if (!mounted || !profile || !userId || !authChecked) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+      <div className="flex items-center justify-center min-h-screen theme-bg-primary">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
           <p className="text-gray-400">Loading workspace...</p>
@@ -104,7 +104,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen bg-gray-900">
+    <div className="flex h-screen theme-bg-primary">
       <Sidebar
         workspaceId={workspaceId}
         activeChannelId={activeChannelId}
@@ -114,10 +114,10 @@ export default function DashboardLayout({
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Debug info - remove in production */}
-        <div className="bg-gray-800 border-b border-gray-700 px-4 py-2 text-xs text-gray-400 flex items-center justify-between">
+        <div className="theme-bg-secondary border-b theme-border px-4 py-2 text-xs theme-text-muted flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span>
-              User: <span className="text-white">{profile?.username || userEmail || 'User'}</span>
+              User: <span className="theme-text-secondary font-bold">{profile?.username || userEmail || 'User'}</span>
             </span>
             <span className="text-gray-600">|</span>
             <span>

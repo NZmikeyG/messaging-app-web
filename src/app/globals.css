@@ -1,22 +1,89 @@
 @import "tailwindcss";
 
+/* ===== Theme Variables ===== */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Default: Dark Theme */
+  --bg-primary: #111827;      /* gray-900 equivalent */
+  --bg-secondary: #1f2937;    /* gray-800 equivalent */
+  --bg-tertiary: #030712;     /* gray-950 equivalent */
+  --bg-card: #1f2937;         /* gray-800 equivalent */
+  --bg-input: #111827;        /* gray-900 equivalent */
+  --bg-hover: #374151;        /* gray-700 equivalent */
+  
+  --text-primary: #ffffff;
+  --text-secondary: #e5e7eb;  /* gray-200 */
+  --text-muted: #9ca3af;      /* gray-400 */
+  --text-dim: #6b7280;        /* gray-500 */
+  
+  --border-primary: #374151;  /* gray-700 */
+  --border-secondary: #4b5563; /* gray-600 */
+  
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
+[data-theme="dark"] {
+  --bg-primary: #111827;
+  --bg-secondary: #1f2937;
+  --bg-tertiary: #030712;
+  --bg-card: #1f2937;
+  --bg-input: #111827;
+  --bg-hover: #374151;
+  
+  --text-primary: #ffffff;
+  --text-secondary: #e5e7eb;
+  --text-muted: #9ca3af;
+  --text-dim: #6b7280;
+  
+  --border-primary: #374151;
+  --border-secondary: #4b5563;
+  
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+[data-theme="light"] {
+  --bg-primary: #f8fafc;      /* slate-50 */
+  --bg-secondary: #ffffff;    /* white */
+  --bg-tertiary: #f1f5f9;     /* slate-100 */
+  --bg-card: #ffffff;
+  --bg-input: #f8fafc;
+  --bg-hover: #e2e8f0;        /* slate-200 */
+  
+  --text-primary: #0f172a;    /* slate-900 */
+  --text-secondary: #334155;  /* slate-700 */
+  --text-muted: #64748b;      /* slate-500 */
+  --text-dim: #94a3b8;        /* slate-400 */
+  
+  --border-primary: #e2e8f0;  /* slate-200 */
+  --border-secondary: #cbd5e1; /* slate-300 */
+  
+  --background: #f8fafc;
+  --foreground: #0f172a;
+}
+
+/* ===== Tailwind Theme Integration ===== */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  
+  /* Theme-aware colors for use in Tailwind */
+  --color-theme-bg-primary: var(--bg-primary);
+  --color-theme-bg-secondary: var(--bg-secondary);
+  --color-theme-bg-tertiary: var(--bg-tertiary);
+  --color-theme-bg-card: var(--bg-card);
+  --color-theme-bg-input: var(--bg-input);
+  --color-theme-bg-hover: var(--bg-hover);
+  
+  --color-theme-text-primary: var(--text-primary);
+  --color-theme-text-secondary: var(--text-secondary);
+  --color-theme-text-muted: var(--text-muted);
+  --color-theme-text-dim: var(--text-dim);
+  
+  --color-theme-border-primary: var(--border-primary);
+  --color-theme-border-secondary: var(--border-secondary);
 }
 
 body {
@@ -25,7 +92,50 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* Emoji picker visibility on hover */
+/* ===== Theme-aware utility classes ===== */
+/* These allow easy migration from hardcoded colors */
+
+.theme-bg-primary {
+  background-color: var(--bg-primary);
+}
+
+.theme-bg-secondary {
+  background-color: var(--bg-secondary);
+}
+
+.theme-bg-tertiary {
+  background-color: var(--bg-tertiary);
+}
+
+.theme-bg-card {
+  background-color: var(--bg-card);
+}
+
+.theme-bg-input {
+  background-color: var(--bg-input);
+}
+
+.theme-text-primary {
+  color: var(--text-primary);
+}
+
+.theme-text-secondary {
+  color: var(--text-secondary);
+}
+
+.theme-text-muted {
+  color: var(--text-muted);
+}
+
+.theme-border {
+  border-color: var(--border-primary);
+}
+
+.theme-border-secondary {
+  border-color: var(--border-secondary);
+}
+
+/* ===== Emoji picker visibility on hover ===== */
 .group:hover .emoji-picker {
   display: flex !important;
 }
@@ -38,4 +148,29 @@ body {
   .emoji-picker {
     display: flex !important;
   }
+}
+
+/* ===== Light theme specific overrides ===== */
+[data-theme="light"] {
+  /* Ensure good contrast for shadows in light mode */
+  --tw-shadow-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Scrollbar styling for both themes */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
 }

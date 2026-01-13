@@ -184,9 +184,9 @@ export default function DMConversation() {
   if (loading && !otherUser) return <div className="p-8 text-white">Loading...</div>
 
   return (
-    <div className="flex flex-col h-full bg-neutral-900 text-white">
+    <div className="flex flex-col h-full theme-bg-primary theme-text-primary">
       {/* Header */}
-      <div className="border-b border-neutral-800 bg-neutral-800 p-4 shrink-0 flex justify-between items-center">
+      <div className="border-b theme-border theme-bg-secondary p-4 shrink-0 flex justify-between items-center">
         <div>
           <h2 className="font-bold text-lg">{otherUser?.username || 'User'}</h2>
           <div className={`text-xs ${recipientPresence?.is_online ? 'text-green-400' : 'text-gray-400'}`}>
@@ -227,11 +227,11 @@ export default function DMConversation() {
 
               <div className="max-w-[70%]">
                 {isEditing ? (
-                  <form onSubmit={handleEditMessage} className="bg-neutral-800 p-2 rounded">
+                  <form onSubmit={handleEditMessage} className="theme-bg-secondary p-2 rounded">
                     <input
                       value={editContent}
                       onChange={e => setEditContent(e.target.value)}
-                      className="bg-neutral-700 w-full p-1 rounded text-white"
+                      className="theme-bg-input w-full p-1 rounded theme-text-primary"
                       autoFocus
                     />
                     <div className="flex justify-end gap-2 mt-2">
@@ -242,7 +242,7 @@ export default function DMConversation() {
                 ) : (
                   <div className={`
                         px-4 py-2 rounded-2xl relative
-                        ${isOwn ? 'bg-purple-600 rounded-br-none' : 'bg-neutral-800 rounded-bl-none'}
+                        ${isOwn ? 'bg-purple-600 rounded-br-none text-white' : 'theme-bg-secondary rounded-bl-none theme-text-primary border theme-border-secondary'}
                       `}>
                     <p className="whitespace-pre-wrap word-break">{msg.content}</p>
                     <div className="text-[10px] opacity-70 flex justify-end gap-1 mt-1">
@@ -264,7 +264,7 @@ export default function DMConversation() {
                             key={emoji}
                             onClick={() => handleReaction(msg.id, emoji)}
                             className={`px-1.5 py-0.5 rounded-full text-xs flex items-center gap-1 border
-                              ${users.includes(currentUser?.id || '') ? 'bg-purple-500/20 border-purple-500/50' : 'bg-neutral-700/50 border-transparent'}
+                              ${users.includes(currentUser?.id || '') ? 'bg-purple-500/20 border-purple-500/50' : 'theme-bg-tertiary theme-border-secondary'}
                             `}
                           >
                             <span>{emoji}</span>
@@ -299,7 +299,7 @@ export default function DMConversation() {
                       setMenuPos({ x: rect.left, y: rect.top })
                       setShowAllEmojis(false)
                     }}
-                    className="w-8 h-8 flex items-center justify-center bg-neutral-800 hover:bg-neutral-700 rounded-full border border-gray-700 text-gray-400 hover:text-white shadow-lg"
+                    className="w-8 h-8 flex items-center justify-center theme-bg-secondary hover:theme-bg-hover rounded-full border theme-border theme-text-muted hover:theme-text-primary shadow-lg"
                   >
                     ⋯
                   </button>
@@ -312,14 +312,14 @@ export default function DMConversation() {
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSendMessage} className="p-4 bg-neutral-800 border-t border-neutral-700 flex gap-2">
+      <form onSubmit={handleSendMessage} className="p-4 theme-bg-secondary border-t theme-border flex gap-2">
         <input
           value={messageContent}
           onChange={e => setMessageContent(e.target.value)}
-          className="flex-1 bg-neutral-900 border border-neutral-700 rounded px-4 py-2 focus:outline-none focus:border-purple-500"
+          className="flex-1 theme-bg-input border theme-border-secondary rounded px-4 py-2 focus:outline-none focus:border-purple-500 theme-text-primary"
           placeholder="Type a message..."
         />
-        <button type="submit" disabled={!messageContent.trim() || sending} className="bg-purple-600 px-4 py-2 rounded font-bold hover:bg-purple-700 disabled:opacity-50">
+        <button type="submit" disabled={!messageContent.trim() || sending} className="bg-indigo-600 text-white px-4 py-2 rounded font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors">
           Send
         </button>
       </form>

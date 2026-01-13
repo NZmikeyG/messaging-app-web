@@ -24,6 +24,8 @@ import { EditProfileModal } from '@/components/UserProfile/EditProfileModal'
 import SidebarNav, { type NavTab } from './SidebarNav'
 import SidebarPane from './SidebarPane'
 
+import { ActivityPanel } from './ActivityPanel'
+
 interface SidebarProps {
   workspaceId: string
   activeChannelId?: string
@@ -47,6 +49,7 @@ export default function Sidebar({
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<NavTab>('channels')
+  const [isActivityOpen, setIsActivityOpen] = useState(false)
 
   // Modal States
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false)
@@ -59,6 +62,21 @@ export default function Sidebar({
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [channelToDelete, setChannelToDelete] = useState<{ id: string, name: string } | null>(null)
+
+  const handleTabSelect = (tab: NavTab) => {
+    if (tab === 'activity') {
+      setIsActivityOpen(!isActivityOpen)
+    } else if (tab === 'settings') {
+      // Navigate to dedicated settings page
+      router.push('/dashboard/settings')
+    } else if (tab === 'files') {
+      // Navigate to dedicated files page
+      router.push('/dashboard/files')
+    } else {
+      setActiveTab(tab)
+      setIsActivityOpen(false) // Auto-close activity panel
+    }
+  }
 
   // Load Channels & DMs
   const loadData = useCallback(async () => {
@@ -229,7 +247,7 @@ export default function Sidebar({
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Filter..."
-          className="w-full px-3 py-1.5 bg-gray-950/50 text-white placeholder-gray-500 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500/50 border border-gray-800 mb-3"
+          className="w-full px-3 py-1.5 theme-bg-input theme-text-primary placeholder-gray-500 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500/50 border theme-border mb-3"
         />
 
         {error && (
@@ -299,7 +317,7 @@ export default function Sidebar({
             <button
               key={conv.id}
               onClick={() => router.push(`/dashboard/dm/${conv.other_user?.id}`)}
-              className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-800 rounded-lg transition group text-left"
+              className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-800/50 rounded-lg transition group text-left"
             >
               <div className="relative shrink-0">
                 <div className="w-9 h-9 rounded-full bg-indigo-600/20 text-indigo-400 flex items-center justify-center text-sm font-semibold">
@@ -311,7 +329,7 @@ export default function Sidebar({
               </div>
               <div className="overflow-hidden flex-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-200 group-hover:text-white truncate">
+                  <span className="text-sm font-medium theme-text-primary group-hover:theme-text-primary truncate">
                     {conv.other_user?.username || 'Unknown'}
                   </span>
                   {/* Todo: Timestamp */}
@@ -347,12 +365,21 @@ export default function Sidebar({
   )
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full relative"> {/* Relative for absolute positioning of activity panel */}
       {/* 1. Primary Navigation Rail */}
-      <SidebarNav activeTab={activeTab} onTabSelect={setActiveTab} />
+      <SidebarNav
+        activeTab={activeTab}
+        onTabSelect={handleTabSelect}
+      />
+
+      {/* Activity Panel (Pop-out) */}
+      <ActivityPanel
+        isOpen={isActivityOpen}
+        onClose={() => setIsActivityOpen(false)}
+      />
 
       {/* 2. Secondary Sidebar Pane */}
-      <div className="bg-gray-900 border-r border-gray-800 w-72 shrink-0 flex flex-col h-full">
+      <div className="theme-bg-primary border-r theme-border w-72 shrink-0 flex flex-col h-full">
         <div className="flex-1 overflow-hidden h-full flex flex-col">
           {activeTab === 'channels' && renderChannelsContent()}
           {activeTab === 'dms' && renderDMsContent()}
@@ -367,7 +394,7 @@ export default function Sidebar({
         </div>
 
         {/* User Profile Footer (Always visible at bottom of pane) */}
-        <div className="p-3 bg-gray-950/50 border-t border-gray-800">
+        <div className="p-3 theme-bg-tertiary border-t theme-border">
           <div className="flex items-center gap-3">
             <div
               className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-500 to-indigo-600 flex items-center justify-center text-white font-bold shrink-0 relative group cursor-pointer overflow-hidden shadow-md"
@@ -385,7 +412,7 @@ export default function Sidebar({
             </div>
             <div className="flex-1 overflow-hidden min-w-0">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-bold text-white truncate pr-2">
+                <div className="text-sm font-bold theme-text-primary truncate pr-2">
                   {profile?.username || 'User'}
                 </div>
               </div>

@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase/client'
 import { MessageItem } from '@/components/Messages/MessageItem'
 import { UserDMPopover } from '@/components/UserDMPopover'
 import { Message, MessageReaction } from '@/types'
+import { MentionPopup } from '@/components/Messages/MentionPopup'
 
 const DEFAULT_EMOJIS = ['👍', '😄', '🔥', '💯', '🙏', '🏀']
 
@@ -45,12 +46,13 @@ const MessageTree = ({
   replyingTo,
   onSendReply,
   currentUserId,
-  onUserClick // New
+  onUserClick, // New
+  channelMembers
 }: any) => {
   if (!nodes || nodes.length === 0) return null
 
   return (
-    <div className={`flex flex-col ${depth > 0 ? 'ml-4 border-l-2 border-gray-800 pl-4 my-2' : 'space-y-4'}`}>
+    <div className={`flex flex-col ${depth > 0 ? 'ml-4 border-l-2 theme-border pl-4 my-2' : 'space-y-4'}`}>
       {nodes.map((node: any) => (
         <div key={node.id}>
           <MessageItem
@@ -62,12 +64,17 @@ const MessageTree = ({
             onReply={onReply}
             currentUserId={currentUserId}
             onUserClick={onUserClick}
+            channelMembers={channelMembers}
           />
 
           {/* Reply Form */}
           {replyingTo === node.id && (
             <div className="ml-8 mt-2 mb-4">
-              <ReplyInput onSubmit={(text) => onSendReply(text, node.id)} onCancel={() => onReply(null)} />
+              <ReplyInput
+                onSubmit={(text) => onSendReply(text, node.id)}
+                onCancel={() => onReply(null)}
+                users={channelMembers} // Use the fetched members (now all profiles)
+              />
             </div>
           )}
 
@@ -85,6 +92,7 @@ const MessageTree = ({
               onSendReply={onSendReply}
               currentUserId={currentUserId}
               onUserClick={onUserClick}
+              channelMembers={channelMembers}
             />
           )}
         </div>
@@ -93,15 +101,53 @@ const MessageTree = ({
   )
 }
 
-const ReplyInput = ({ onSubmit, onCancel }: { onSubmit: (text: string) => void, onCancel: () => void }) => {
+const ReplyInput = ({ onSubmit, onCancel, users }: { onSubmit: (text: string) => void, onCancel: () => void, users: any[] }) => {
   const [text, setText] = useState('')
+  const [showPopup, setShowPopup] = useState(false)
+  const [query, setQuery] = useState('')
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value
+    setText(val)
+
+    const match = val.match(/@([a-zA-Z0-9_ ]*)$/)
+    if (match) {
+      setQuery(match[1])
+      setShowPopup(true)
+    } else {
+      setShowPopup(false)
+    }
+  }
+
+  const handleSelect = (user: any) => {
+    const lastIndex = text.lastIndexOf(`@${query}`)
+    if (lastIndex !== -1) {
+      const prefix = text.substring(0, lastIndex)
+      const suffix = text.substring(lastIndex + (`@${query}`).length)
+      setText(`${prefix}@${user.username} ${suffix}`)
+    }
+    setShowPopup(false)
+  }
+
+  const filtered = users.filter(u => u.username?.toLowerCase().includes(query.toLowerCase()))
+
   return (
-    <div className="flex gap-2 items-start bg-gray-900 border border-gray-700 p-3 rounded-lg">
+    <div className="flex gap-2 items-start theme-bg-input border theme-border-secondary p-3 rounded-lg relative">
+      {showPopup && filtered.length > 0 && (
+        <div className="absolute bottom-full mb-2 left-0 z-50">
+          <MentionPopup
+            users={filtered}
+            onSelect={handleSelect}
+            onClose={() => setShowPopup(false)}
+            position={{ top: 0, left: 0 }}
+          />
+        </div>
+      )}
       <textarea
         autoFocus
-        value={text} onChange={e => setText(e.target.value)}
-        placeholder="What are your thoughts?"
-        className="flex-1 bg-transparent text-white text-sm focus:outline-none min-h-[60px]"
+        value={text} onChange={handleChange}
+        placeholder="Reply..."
+        className="flex-1 bg-transparent theme-text-primary text-sm focus:outline-none min-h-[60px]"
       />
       <div className="flex flex-col gap-2">
         <button
@@ -220,17 +266,50 @@ export default function ChannelMessagesPage() {
   }
 
   const handleEdit = async (id: string, content: string) => {
-    await supabase.from('messages').update({ content, edited_at: new Date().toISOString() }).eq('id', id)
-    fetchMessages()
+    console.log('📝 [EDIT] Attempting to edit message:', id)
+    const { data, error, count } = await supabase.from('messages').update({
+      content,
+      edited_at: new Date().toISOString(),
+      is_edited: true
+    })
+      .eq('id', id)
+      .select()
+
+    if (error) {
+      console.error('❌ [EDIT ERROR]', error)
+      alert(`Failed to edit message: ${error.message}`)
+    } else if (!data || data.length === 0) {
+      console.warn('⚠️ [EDIT] No rows updated! Check RLS policies or ownership.', { id, user: userProfile?.id })
+      alert('Failed to edit: You might not have permission or the message was not found.')
+    } else {
+      console.log('✅ [EDIT] Success:', data)
+      fetchMessages()
+    }
   }
 
   const handleDelete = async (id: string) => {
-    const { error } = await supabase.from('messages').delete().eq('id', id)
+    // Confirm is handled in MessageItem
+    console.log('🗑️ [DELETE] Attempting to delete message:', id)
+
+    // Attempt soft delete
+    const { data, error, count } = await supabase
+      .from('messages')
+      .update({
+        content: '[deleted]',
+        deleted: true,
+        is_deleted: true
+      })
+      .eq('id', id)
+      .select()
 
     if (error) {
       console.error('❌ [DELETE ERROR]', error)
       alert(`Failed to delete message: ${error.message}`)
+    } else if (!data || data.length === 0) {
+      console.warn('⚠️ [DELETE] No rows updated! Check RLS policies or ownership.', { id, user: userProfile?.id })
+      alert('Failed to delete: You might not have permission or the message was not found.')
     } else {
+      console.log('✅ [DELETE] Success:', data)
       fetchMessages()
     }
   }
@@ -272,8 +351,78 @@ export default function ChannelMessagesPage() {
   // Derived Tree
   const messageTree = useMemo(() => buildMessageTree(messages), [messages])
 
+  // Mention Logic
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [channelMembers, setChannelMembers] = useState<any[]>([])
+  const [showMentionPopup, setShowMentionPopup] = useState(false)
+
+  // Fetch CHANNEL MEMBERS for mentions (reverted to only channel members)
+  useEffect(() => {
+    const fetchMembers = async () => {
+      const { data } = await supabase
+        .from('channel_members')
+        .select('profiles(id, username, avatar_url)')
+        .eq('channel_id', channelId)
+
+      if (data) {
+        // Flatten the structure: [{ profiles: { ... } }] -> [{ ... }]
+        const members = data.map((item: any) => item.profiles).filter(Boolean)
+        setChannelMembers(members)
+      }
+    }
+    fetchMembers()
+  }, [channelId])
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newVal = e.target.value
+    setMainInput(newVal)
+
+    // Simple detection: Last word starts with @ (allow spaces for names like "Campbell Marsters")
+    const match = newVal.match(/@([a-zA-Z0-9_ ]*)$/)
+    if (match) {
+      setMentionQuery(match[1])
+      setShowMentionPopup(true)
+    } else {
+      setShowMentionPopup(false)
+      setMentionQuery(null)
+    }
+  }
+
+  const handleMentionSelect = (user: { username: string }) => {
+    if (!mentionQuery && mentionQuery !== '') return
+
+    // Replace the last occurrence of @query with @username + space
+    // Logic: Find the last index of @ + query
+    const lastIndex = mainInput.lastIndexOf(`@${mentionQuery}`)
+    if (lastIndex !== -1) {
+      const prefix = mainInput.substring(0, lastIndex)
+      const suffix = mainInput.substring(lastIndex + (`@${mentionQuery}`).length)
+      const newValue = `${prefix}@${user.username} ${suffix}`
+      setMainInput(newValue)
+    }
+    setShowMentionPopup(false)
+    // Focus back handled by browser usually since button click doesn't blur permanently on some logic but we might need ref.focus()
+  }
+
+  const filteredMembers = useMemo(() => {
+    if (mentionQuery === null) return []
+    return channelMembers.filter(m => m.username?.toLowerCase().includes(mentionQuery.toLowerCase()))
+  }, [channelMembers, mentionQuery])
+
   return (
-    <div className="flex flex-col min-h-screen bg-black relative">
+    <div className="flex flex-col min-h-screen theme-bg-primary relative">
+      {/* Mention Popup */}
+      {showMentionPopup && filteredMembers.length > 0 && (
+        <div className="absolute bottom-24 left-4 z-50">
+          <MentionPopup
+            users={filteredMembers}
+            onSelect={handleMentionSelect}
+            onClose={() => setShowMentionPopup(false)}
+            position={{ top: 0, left: 0 }} // Managed by CSS parent absolute
+          />
+        </div>
+      )}
+
       {/* DM Popover */}
       <UserDMPopover
         isOpen={!!dmTargetUser}
@@ -281,8 +430,8 @@ export default function ChannelMessagesPage() {
         targetUser={dmTargetUser}
       />
       {/* Header */}
-      <div className="sticky top-0 z-10 py-3 px-6 bg-black/95 backdrop-blur-sm border-b border-gray-800 flex justify-between items-center shadow-sm">
-        <span className="text-lg font-bold text-white"># {channelInfo?.name || '...'}</span>
+      <div className="sticky top-0 z-10 py-3 px-6 theme-bg-primary border-b theme-border flex justify-between items-center shadow-sm">
+        <span className="text-lg font-bold theme-text-primary"># {channelInfo?.name || '...'}</span>
       </div>
 
       {/* Messages Area */}
@@ -299,13 +448,14 @@ export default function ChannelMessagesPage() {
             onSendReply={handleSend}
             currentUserId={userProfile?.id}
             onUserClick={handleUserClick}
+            channelMembers={channelMembers} // Pass down to tree
           />
           <div ref={bottomRef} className="h-10" />
         </div>
       </div>
 
       {/* Main Input (Bottom) - Only for top-level messages */}
-      <div className="p-4 bg-black border-t border-gray-800">
+      <div className="p-4 theme-bg-primary border-t theme-border relative z-20">
         <div className="max-w-4xl mx-auto flex gap-4">
           <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white font-bold">
             {userProfile?.username?.[0] || 'U'}
@@ -317,9 +467,9 @@ export default function ChannelMessagesPage() {
             <div className="relative">
               <textarea
                 value={mainInput}
-                onChange={e => setMainInput(e.target.value)}
-                placeholder="Start a thread..."
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:ring-1 focus:ring-purple-500 min-h-[50px] resize-none"
+                onChange={handleInputChange}
+                placeholder="Start a thread... (Type @ to mention)"
+                className="w-full theme-bg-input border theme-border-secondary rounded-lg p-3 theme-text-primary focus:outline-none focus:ring-1 focus:ring-purple-500 min-h-[50px] resize-none"
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(mainInput); } }}
               />
             </div>
